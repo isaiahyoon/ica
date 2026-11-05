@@ -1,0 +1,56 @@
+# Rule 1
+
+Never go against Scripture, or regard it as false or untrustworthy. It will always be your source of truth, forever.
+
+# Project
+
+Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Express, server-rendered HTML, no build step. Local prototype only — no domain/deployment concerns yet.
+
+- `server.js` — `createApp()` factory and routes (public pages, admin login, uploads, deletes).
+- `lib/render.js` — all HTML templates. Always escape user content with `esc()`.
+- `lib/auth.js` — password + signed HttpOnly SameSite=Strict cookie, login throttle.
+- `lib/store.js` — JSON-file store in `data/` (git-ignored). Uploaded files live in `uploads/` (git-ignored).
+- `public/styles.css` — the single stylesheet and all design tokens.
+- `tests/` — `node --test` end-to-end tests. Run `npm test` after changes.
+
+## Pages
+
+- `/` — Information page (the landing page). Detailed About content is pending from the owner; keep placeholders honest ("coming soon"), never invent service times, addresses, or doctrine.
+- `/sermons` — public audio list; `/gallery` — public photo gallery.
+- `/admin` — sign-in required; upload/delete sermon audio and gallery photos.
+
+## Running locally
+
+`npm start` (http://localhost:8100). Set `ADMIN_PASSWORD`; otherwise a freshly generated password is printed at startup.
+
+## Upload & security rules
+
+- Admin-only routes must use `auth.requireAdmin`.
+- Uploads are whitelisted by extension **and** MIME prefix, size-limited, and stored under unique generated (UUID) names (never the user's filename). No SVG/HTML uploads.
+- Never commit `data/`, `uploads/`, or secrets.
+
+# Design System
+
+The look draws from the sibling project `src/word` (KRV edition: `styles/theme.css`, `styles/editions.css`, `styles/typography.css`). When in doubt, read those files and match them.
+
+- **Dominantly blue.** Page background is the KRV gradient (`#bed8ea → #e8f1f4 → #c3d3e5`), light blue `#defefc`, mid blue `#72c6d3`.
+- **Navy `#223b55`** for regal surfaces: header, footer, hero, headings. Pair with brass `#dfc681` / `#a97c35` rules and highlights.
+- **Accents, used sparingly** (cards, borders, glows): pink `#fad4e0`, lavender `#dcd7f7`, yellow `#fffecf`. Never let accents outweigh blue.
+- **Type:** Gelasio (serif, headings/verses), DM Sans (UI/body), Noto Serif KR for Korean text. Scripture and quotes in italic serif.
+- **Shape:** soft radii (16px cards, pill buttons), gentle navy-tinted shadows, generous whitespace.
+- All colors are CSS variables in `:root` of `public/styles.css`; don't hard-code new hex values in components.
+- Accessibility: visible focus rings, skip link, sufficient contrast, `prefers-reduced-motion` respected, responsive down to phones, alt text on photos.
+
+## Character the site should embody
+
+Clear, mature, virtuous, excellent, diplomatic, global, grounded, kind, welcoming, safe, lovable, witty, pleasant, honest, talented, reliable, hardworking, thoughtful, entertaining, playful, romantic, happy, intelligent, artistic, familial, fashionable, amazing, funny, pretty, dope, elegant, innovative, gentle, marvelous, graceful, comforting, poetic, prudent, inviting, clean, regal, homely, God-fearing (knowledgeable), wise, classy.
+
+In practice: warm, plain-spoken copy; uncluttered layouts with obvious navigation; polished regal details balanced by friendly touches; honest content (no invented facts); safe handling of uploads and admin access; bilingual (English/Korean) friendly; code that is small, readable, tested, and reliable.
+
+## Language
+
+Nothing is random; all things are under the sovereignty of God. Do not describe anything as "random" or "by chance" in site copy, docs, or comments — say "generated", "unique", or "unpredictable" instead. (Standard library calls such as `crypto.randomUUID()` are fine; they are API names.)
+
+## Keeping docs current
+
+Update this file and `README.md` whenever pages, routes, structure, commands, or design tokens change.
