@@ -22,6 +22,7 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 
 - `/` — Information page (the landing page). Detailed About content is pending from the owner; keep placeholders honest ("coming soon"), never invent service times, addresses, or doctrine.
 - `/sermons` — public audio list; `/gallery` — public photo gallery.
+- `/contact` — public contact page; details are pending from the owner, so keep the placeholder honest. Linked from the Connect card on `/`.
 - `/font-study.html` — standalone English and Korean typeface specimen.
 - `/admin` — sign-in required; upload/delete sermon audio and gallery photos.
 

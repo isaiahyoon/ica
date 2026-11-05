@@ -56,6 +56,10 @@ test('public pages render, landing is the information page', async (t) => {
     assert.doesNotMatch(await response.text(), /href="\/admin(?:\/login)?"/);
   }
   assert.doesNotMatch(home, /href="\/admin(?:\/login)?"/);
+  assert.match(home, /<nav[^>]*>[\s\S]*href="\/contact"[\s\S]*<\/nav>/);
+  const contact = await fetch(`${base}/contact`);
+  assert.equal(contact.status, 200);
+  assert.match(await contact.text(), /<h1>.*Contact.*연락처/s);
   const loginPage = await (await fetch(`${base}/admin/login`)).text();
   assert.match(loginPage, /<form method="post" action="\/admin\/login"/);
   assert.doesNotMatch(loginPage, /href="\/admin(?:\/login)?"/);

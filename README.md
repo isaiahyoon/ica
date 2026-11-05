@@ -9,6 +9,7 @@ Church website prototype.
 - **Information page** (landing page, `/`) — welcome and overview; About details to come.
 - **Sermons** (`/sermons`) — public audio player list.
 - **Gallery** (`/gallery`) — public photo gallery.
+- **Contact** (`/contact`) — public contact page (details coming soon); linked from the Connect card on the welcome page.
 - **Admin** (`/admin`) — password-protected upload and removal of sermon audio and photos.
 - **Font study** (`/font-study.html`) — English and Korean typeface specimens with a live four-font serif/sans pairing preview.
 

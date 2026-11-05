@@ -73,6 +73,8 @@ export function createApp({ dataDir = path.join(root, 'data'), uploadDir = path.
 
   app.get('/', (req, res) => page(req, res, { active: 'home', body: view.homePage() }));
 
+  app.get('/contact', (req, res) => page(req, res, { title: 'Contact', active: 'contact', body: view.contactPage() }));
+
   app.get('/sermons', async (req, res) => {
     const sermons = (await store.read('sermons')).sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.createdAt.localeCompare(a.createdAt));
     const admin = auth.isAdmin(req);
