@@ -241,7 +241,11 @@ test('sermons paginate at 10 and gallery at 20', async (t) => {
   const s1 = await (await fetch(`${base}/sermons`)).text();
   assert.equal(count(s1, /<article class="sermon"/g), 10);
   assert.match(s1, /page=2/);
-  assert.equal(count(await (await fetch(`${base}/sermons?page=3`)).text(), /<article class="sermon"/g), 3);
+  assert.match(s1, /class="page-num is-current" aria-current="page">1</);
+  const s3 = await (await fetch(`${base}/sermons?page=3`)).text();
+  assert.match(s3, /class="page-step next is-disabled"/);
+  assert.match(s3, /rel="prev"/);
+  assert.equal(count(s3, /<article class="sermon"/g), 3);
   assert.equal(count(await (await fetch(`${base}/sermons?page=99`)).text(), /<article class="sermon"/g), 3);
   assert.equal(count(await (await fetch(`${base}/sermons?page=abc`)).text(), /<article class="sermon"/g), 10);
   assert.equal(count(await (await fetch(`${base}/gallery`)).text(), /<img src="\/uploads\/photos/g), 20);
