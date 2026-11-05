@@ -7,9 +7,10 @@ Church website prototype.
 ## Features
 
 - **Information page** (landing page, `/`) — welcome and overview; About details to come.
+- **About** (`/about`) — bilingual introduction page; detailed content is coming soon.
 - **Sermons** (`/sermons`) — public audio player list.
 - **Gallery** (`/gallery`) — public photo gallery.
-- **Contact** (`/contact`) — public contact page (details coming soon); linked from the Connect card on the welcome page.
+- **Contact** (`/contact`) — address with a Google Maps link, worship times, visitor details, and Instagram; includes 1 Corinthians 13:12 beside the church logo and is linked from the Connect card on the welcome page.
 - **Admin** (`/admin`) — password-protected upload and removal of sermon audio and photos.
 - **Font study** (`/font-study.html`) — English and Korean typeface specimens with a live four-font serif/sans pairing preview.
 

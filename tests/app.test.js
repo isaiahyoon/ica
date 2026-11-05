@@ -62,9 +62,37 @@ test('public pages render, landing is the information page', async (t) => {
   assert.doesNotMatch(home, /href="\/admin(?:\/login)?"/);
   assert.match(home, /<a class="brand home-link" href="\/"/);
   assert.match(home, /<nav[^>]*>[\s\S]*href="\/contact"[\s\S]*<\/nav>/);
+  assert.match(home, /class="btn btn-hero btn-mint" href="\/about"/);
+  assert.match(home, /<nav[^>]*>[\s\S]*href="\/about"[\s\S]*<\/nav>/);
+  const about = await fetch(`${base}/about`);
+  assert.equal(about.status, 200);
+  const aboutHtml = await about.text();
+  assert.match(aboutHtml, /<h1>.*About.*소개.*<\/h1>/s);
+  assert.match(aboutHtml, /More about our church is coming soon\./);
+  assert.match(aboutHtml, /href="\/about" aria-current="page" class="is-active"/);
   const contact = await fetch(`${base}/contact`);
   assert.equal(contact.status, 200);
-  assert.match(await contact.text(), /<h1>.*Contact.*연락처/s);
+  const contactHtml = await contact.text();
+  assert.match(contactHtml, /<h1>.*Contact.*연락처/s);
+  assert.match(contactHtml, /class="contact-scripture cornerstone"[\s\S]*<img src="\/favicon\.png" alt="Immanuel Church of America logo"/);
+  assert.match(contactHtml, /For now we see through a glass, darkly;.*1 Corinthians 13:12/s);
+  assert.match(contactHtml, /고린도전서 13:12/);
+  assert.match(contactHtml, /href="https:\/\/www\.google\.com\/maps\/place\/Immanuel\+Church\+of\+America\+%2F\+%EB%AF%B8%EC%A3%BC%EC%9E%84%EB%A7%88%EB%88%84%EC%97%98%EA%B5%90%ED%9A%8C\/@34\.0397122,-118\.3242422,17z\/data=!3m1!4b1!4m6!3m5!1s0x80c2b867941260c9:0xc64dfc88582a36a6!8m2!3d34\.0397078!4d-118\.3216673!16s%2Fg%2F1262s7wvv\?entry=ttu&amp;g_ep=EgoyMDI2MTEwMi4wIKXMDSoASAFQAw%3D%3D" target="_blank" rel="noopener noreferrer">[\s\S]*3406 W Washington Blvd 2F<br>Los Angeles, CA 90019/);
+  assert.match(contactHtml, /href="https:\/\/www\.instagram\.com\/immanuelchurchofamerica\/" target="_blank" rel="noopener noreferrer">@immanuelchurchofamerica/);
+  for (const detail of [
+    'Sunday: 9:00 am, 11:00 am, and 2:30 pm',
+    'Wednesday: 7:30 pm',
+    'Friday: 7:30 pm',
+    'Lunch is provided after the 11:00 am Sunday service.',
+    'English interpretation is available on request.',
+    'Free parking is available',
+    'Our church is ADA accessible, with an elevator available to take you to the second floor.',
+    '엘리베이터로 2층까지 이동하실 수 있습니다.',
+    'All are welcome.',
+    '주일: 오전 9시, 오전 11시, 오후 2시 30분',
+    '수요일: 오후 7시 30분',
+    '금요일: 오후 7시 30분',
+  ]) assert.ok(contactHtml.includes(detail), `Contact page should include "${detail}"`);
   const loginPage = await (await fetch(`${base}/admin/login`)).text();
   assert.match(loginPage, /<form method="post" action="\/admin\/login"/);
   assert.doesNotMatch(loginPage, /href="\/admin(?:\/login)?"/);

@@ -73,6 +73,8 @@ export function createApp({ dataDir = path.join(root, 'data'), uploadDir = path.
 
   app.get('/', (req, res) => page(req, res, { active: 'home', body: view.homePage() }));
 
+  app.get('/about', (req, res) => page(req, res, { title: 'About', active: 'about', body: view.aboutPage() }));
+
   app.get('/contact', (req, res) => page(req, res, { title: 'Contact', active: 'contact', body: view.contactPage() }));
 
   const paginate = (items, req, size) => {
