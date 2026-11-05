@@ -32,7 +32,11 @@ html { scroll-behavior: smooth; }
 body {
   margin: 0; min-height: 100vh; display: flex; flex-direction: column;
   font: 17px/1.65 var(--sans); color: var(--text);
-  background: var(--canvas) linear-gradient(128deg, var(--sky), var(--canvas) 58%, var(--mist)) fixed;
+  background:
+    radial-gradient(60% 40% at 90% 10%, rgba(250,212,224,.45), transparent 70%),
+    radial-gradient(60% 40% at 5% 60%, rgba(220,215,247,.5), transparent 70%),
+    linear-gradient(128deg, var(--sky), var(--canvas) 58%, var(--mist)) fixed,
+    var(--canvas);
 }
 h1, h2, h3 { font-family: var(--serif); color: var(--navy); line-height: 1.15; margin: 0 0 .5em; }
 h1 { font-size: clamp(2.3rem, 5vw, 3.6rem); }
@@ -70,7 +74,12 @@ main.wide { max-width: 1200px; }
 
 .hero {
   text-align: center; padding: clamp(2rem, 6vw, 4.5rem) clamp(1rem, 4vw, 3rem); border-radius: 28px;
-  background: linear-gradient(150deg, var(--navy) 0%, #2d4d6e 100%); color: #e8f1f4; box-shadow: var(--shadow);
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgba(220,215,247,.38), transparent 55%),
+    radial-gradient(100% 80% at 0% 100%, rgba(250,212,224,.30), transparent 55%),
+    radial-gradient(70% 50% at 50% 115%, rgba(223,198,129,.35), transparent 70%),
+    linear-gradient(155deg, var(--navy-deep) 0%, var(--navy) 45%, #2f5f86 100%);
+  color: #e8f1f4; box-shadow: var(--shadow);
   border: 1px solid var(--brass-soft); position: relative; overflow: hidden;
 }
 .hero::before, .hero::after { content: ""; position: absolute; border-radius: 50%; pointer-events: none; }
@@ -99,10 +108,17 @@ main.wide { max-width: 1200px; }
 .card { padding: 1.5rem; border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--line); }
 .card p { margin: 0 0 .75rem; }
 .card a { font-weight: 600; }
-.card-blue { background: var(--blue); }
-.card-lavender { background: var(--lavender); }
-.card-pink { background: var(--pink); }
-.card-yellow { background: var(--yellow); }
+.card { position: relative; overflow: hidden; border-top: 4px solid var(--card-rule, var(--brass-soft)); transition: transform .2s, box-shadow .2s; }
+.card:hover { transform: translateY(-3px); }
+.card-blue { --card-rule: var(--blue-mid); background: linear-gradient(160deg, #fff 0%, var(--blue) 45%, #a9dbe6 100%); }
+.card-lavender { --card-rule: #a99be0; background: linear-gradient(160deg, #fff 0%, var(--lavender) 45%, #bcd3f0 100%); }
+.card-pink { --card-rule: #e9a1b5; background: linear-gradient(160deg, #fff 0%, var(--pink) 45%, var(--lavender) 100%); }
+.card-yellow { --card-rule: var(--brass-soft); background: linear-gradient(160deg, #fff 0%, var(--yellow) 45%, #f6e1a6 100%); }
+
+.cornerstone { margin-top: 3rem; padding: 2.25rem clamp(1.25rem, 5vw, 3.5rem); text-align: center; border-radius: 22px; border: 1px solid var(--line); box-shadow: var(--shadow);
+  background: linear-gradient(120deg, var(--yellow) 0%, #fff 28%, var(--blue) 62%, var(--lavender) 100%); }
+.cornerstone blockquote { margin: 0 auto; max-width: 34em; font: italic 1.4rem/1.5 var(--serif); color: var(--navy); }
+.cornerstone cite { display: block; margin-top: .6rem; font: 600 .8rem var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--brass); }
 
 .page-head { margin-bottom: 2rem; }
 .page-head form { margin-top: .25rem; }
