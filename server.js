@@ -75,16 +75,23 @@ export function createApp({ dataDir = path.join(root, 'data'), uploadDir = path.
 
   app.get('/contact', (req, res) => page(req, res, { title: 'Contact', active: 'contact', body: view.contactPage() }));
 
+  const paginate = (items, req, size) => {
+    const pages = Math.max(1, Math.ceil(items.length / size));
+    const n = Number.parseInt(req.query.page, 10);
+    const current = Math.min(pages, Number.isInteger(n) && n > 0 ? n : 1);
+    return { items: items.slice((current - 1) * size, current * size), current, pages };
+  };
+
   app.get('/sermons', async (req, res) => {
     const sermons = (await store.read('sermons')).sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.createdAt.localeCompare(a.createdAt));
     const admin = auth.isAdmin(req);
-    page(req, res, { title: 'Sermons', active: 'sermons', body: view.sermonsPage({ sermons, admin, csrfToken: admin ? auth.csrfToken(req) : '' }) });
+    page(req, res, { title: 'Sermons', active: 'sermons', body: view.sermonsPage({ ...(({ items, ...p }) => ({ sermons: items, pager: p }))(paginate(sermons, req, 10)), admin, csrfToken: admin ? auth.csrfToken(req) : '' }) });
   });
 
   app.get('/gallery', async (req, res) => {
     const photos = (await store.read('photos')).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const admin = auth.isAdmin(req);
-    page(req, res, { title: 'Gallery', active: 'gallery', wide: true, body: view.galleryPage({ photos, admin, csrfToken: admin ? auth.csrfToken(req) : '' }) });
+    page(req, res, { title: 'Gallery', active: 'gallery', wide: true, body: view.galleryPage({ ...(({ items, ...p }) => ({ photos: items, pager: p }))(paginate(photos, req, 20)), admin, csrfToken: admin ? auth.csrfToken(req) : '' }) });
   });
 
   app.get('/admin/login', (req, res) => {

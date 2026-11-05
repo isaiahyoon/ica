@@ -17,6 +17,7 @@ async function boot() {
   return {
     base,
     uploadDir: path.join(tmp, 'uploads'),
+    dataDir: path.join(tmp, 'data'),
     close: async () => {
       const closed = new Promise((resolve) => server.close(resolve));
       server.closeAllConnections();
@@ -183,6 +184,8 @@ test('admin can upload, list and delete sermon audio and photos', async (t) => {
   assert.equal((await fetch(`${base}/admin/sermons`, { method: 'POST', body: s, headers: { cookie, origin: base }, redirect: 'manual' })).status, 302);
   const sermons = await (await fetch(`${base}/sermons`)).text();
   assert.match(sermons, /&lt;b&gt;Grace&lt;\/b&gt;/);
+  const sid = sermons.match(/id="sermon-([^"]+)"/)[1];
+  assert.match(sermons, new RegExp(`href="/sermons#sermon-${sid}"`));
   const src = sermons.match(/src="(\/uploads\/audio\/[^"]+)"/)[1];
   assert.equal((await fetch(base + src)).status, 200);
 
@@ -223,4 +226,24 @@ test('admin can upload, list and delete sermon audio and photos', async (t) => {
   });
   assert.equal(deleted.status, 302);
   assert.equal((await fetch(base + src)).status, 404);
+});
+
+test('sermons paginate at 10 and gallery at 20', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  const mk = (n, extra) => Array.from({ length: n }, (_, i) => ({
+    id: `id${i}`, title: `T${i}`, caption: `C${i}`, file: `f${i}.mp3`, ...extra(i),
+  }));
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'sermons.json'), JSON.stringify(mk(23, (i) => ({ createdAt: new Date(i * 1000).toISOString() }))));
+  await fs.writeFile(path.join(dataDir, 'photos.json'), JSON.stringify(mk(45, (i) => ({ createdAt: new Date(i * 1000).toISOString() }))));
+  const count = (h, re) => (h.match(re) || []).length;
+  const s1 = await (await fetch(`${base}/sermons`)).text();
+  assert.equal(count(s1, /<article class="sermon"/g), 10);
+  assert.match(s1, /page=2/);
+  assert.equal(count(await (await fetch(`${base}/sermons?page=3`)).text(), /<article class="sermon"/g), 3);
+  assert.equal(count(await (await fetch(`${base}/sermons?page=99`)).text(), /<article class="sermon"/g), 3);
+  assert.equal(count(await (await fetch(`${base}/sermons?page=abc`)).text(), /<article class="sermon"/g), 10);
+  assert.equal(count(await (await fetch(`${base}/gallery`)).text(), /<img src="\/uploads\/photos/g), 20);
+  assert.equal(count(await (await fetch(`${base}/gallery?page=3`)).text(), /<img src="\/uploads\/photos/g), 5);
 });
