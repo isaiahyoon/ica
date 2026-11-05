@@ -169,14 +169,27 @@ export function createApp({ dataDir = path.join(root, 'data'), uploadDir = path.
     csrfAfterUpload(photoDir),
     async (req, res) => {
       if (!req.files?.length) return adminView(req, res, 400, { error: 'Please choose at least one photo.' });
-      const caption = clean(req.body.caption, 200);
+      const shared = clean(req.body.caption, 200);
+      const each = [].concat(req.body.captions ?? []);
       const now = Date.now();
       await store.update('photos', (list) => [...list, ...req.files.map((f, i) => ({
-        id: crypto.randomUUID(), caption, file: f.filename,
+        id: crypto.randomUUID(), caption: clean(each[i], 200) || shared, file: f.filename,
         createdAt: new Date(now + i).toISOString(),
       }))]);
       res.redirect('/admin?notice=' + encodeURIComponent(`${req.files.length} photo(s) added.`));
     });
+
+  app.post('/admin/photos/:id/edit', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, async (req, res) => {
+    const caption = clean(req.body.caption, 200);
+    let found = false;
+    await store.update('photos', (list) => list.map((p) => {
+      if (p.id !== req.params.id) return p;
+      found = true;
+      return { ...p, caption };
+    }));
+    if (!found) return res.status(404).send(view.layout({ title: 'Not found', admin: true, body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }) }));
+    res.redirect('/gallery');
+  });
 
   const remove = (name, dir, back) => async (req, res) => {
     let gone = [];

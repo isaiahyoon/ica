@@ -198,6 +198,21 @@ test('admin can upload, list and delete sermon audio and photos', async (t) => {
   assert.equal((await fetch(`${base}/admin/photos`, { method: 'POST', body: p, headers: { cookie, origin: base }, redirect: 'manual' })).status, 302);
   assert.match(await (await fetch(`${base}/gallery`)).text(), /Picnic/);
 
+  const b = new FormData();
+  b.set('_csrf', csrf);
+  for (const n of ['b1', 'b2']) b.append('photos', new Blob([new Uint8Array([1])], { type: 'image/png' }), n + '.png');
+  b.set('caption', 'Shared');
+  b.append('captions', 'First one'); b.append('captions', '');
+  assert.equal((await fetch(`${base}/admin/photos`, { method: 'POST', body: b, headers: { cookie, origin: base }, redirect: 'manual' })).status, 302);
+  const gal = await (await fetch(`${base}/gallery`, { headers: { cookie } })).text();
+  assert.match(gal, /First one/);
+  assert.match(gal, /Shared/);
+  const pid = gal.match(/\/admin\/photos\/([^/]+)\/edit/)[1];
+  const bodyEdit = new URLSearchParams({ _csrf: csrf, caption: 'Edited <i>' });
+  const edit = await fetch(`${base}/admin/photos/${pid}/edit`, { method: 'POST', body: bodyEdit, headers: { cookie, origin: base }, redirect: 'manual' });
+  assert.equal(edit.status, 302);
+  assert.match(await (await fetch(`${base}/gallery`)).text(), /Edited &lt;i&gt;/);
+
   const admin = await (await fetch(`${base}/sermons`, { headers: { cookie } })).text();
   const del = admin.match(/action="(\/admin\/sermons\/[^"]+)"/)[1];
   const deleted = await fetch(base + del, {
