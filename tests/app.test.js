@@ -50,7 +50,15 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(home, /<img class="brand-mark" src="\/favicon.png"/);
   assert.equal((await fetch(`${base}/favicon.png`)).status, 200);
   assert.equal((await fetch(`${base}/instagram-profile.png`)).status, 200);
-  for (const p of ['/sermons', '/gallery']) assert.equal((await fetch(base + p)).status, 200);
+  for (const p of ['/sermons', '/gallery']) {
+    const response = await fetch(base + p);
+    assert.equal(response.status, 200);
+    assert.doesNotMatch(await response.text(), /href="\/admin(?:\/login)?"/);
+  }
+  assert.doesNotMatch(home, /href="\/admin(?:\/login)?"/);
+  const loginPage = await (await fetch(`${base}/admin/login`)).text();
+  assert.match(loginPage, /<form method="post" action="\/admin\/login"/);
+  assert.doesNotMatch(loginPage, /href="\/admin(?:\/login)?"/);
   assert.equal((await fetch(base + '/nope')).status, 404);
 });
 

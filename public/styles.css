@@ -59,6 +59,7 @@ blockquote:lang(ko), .scripture:lang(ko), .verse:lang(ko) { font-family: var(--s
 h1 .bilingual > [lang="ko"], h2 .bilingual > [lang="ko"], h3 .bilingual > [lang="ko"],
 .hero-verse .bilingual > [lang="ko"], .cornerstone blockquote .bilingual > [lang="ko"],
 .scripture .bilingual > [lang="ko"], .site-footer .verse .bilingual > [lang="ko"] { font-family: var(--serif-ko); }
+h1 + p, h2 + p, h3 + p { padding-top: .5rem; }
 h1 { font-size: clamp(2.3rem, 5vw, 3.6rem); }
 h2 { font-size: 1.75rem; }
 h3 { font-size: 1.25rem; }
