@@ -82,16 +82,24 @@ export function createApp({ dataDir = path.join(root, 'data'), uploadDir = path.
     return { items: items.slice((current - 1) * size, current * size), current, pages };
   };
 
+  const SERMONS_PER_PAGE = 10;
+  const PHOTOS_PER_PAGE = 20;
+  const sortSermons = (list) => [...list].sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.createdAt.localeCompare(a.createdAt));
+
   app.get('/sermons', async (req, res) => {
-    const sermons = (await store.read('sermons')).sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.createdAt.localeCompare(a.createdAt));
+    const sermons = sortSermons(await store.read('sermons'));
     const admin = auth.isAdmin(req);
-    page(req, res, { title: 'Sermons', active: 'sermons', body: view.sermonsPage({ ...(({ items, ...p }) => ({ sermons: items, pager: p }))(paginate(sermons, req, 10)), admin, csrfToken: admin ? auth.csrfToken(req) : '' }) });
+    page(req, res, { title: 'Sermons', active: 'sermons', body: view.sermonsPage({ ...(({ items, ...p }) => ({ sermons: items, pager: p }))(paginate(sermons, req, SERMONS_PER_PAGE)), admin, csrfToken: admin ? auth.csrfToken(req) : '' }) });
   });
 
   app.get('/gallery', async (req, res) => {
     const photos = (await store.read('photos')).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const admin = auth.isAdmin(req);
-    page(req, res, { title: 'Gallery', active: 'gallery', wide: true, body: view.galleryPage({ ...(({ items, ...p }) => ({ photos: items, pager: p }))(paginate(photos, req, 20)), admin, csrfToken: admin ? auth.csrfToken(req) : '' }) });
+    const paged = paginate(photos, req, PHOTOS_PER_PAGE);
+    page(req, res, { title: 'Gallery', active: 'gallery', wide: true, body: view.galleryPage({
+      photos: paged.items, allPhotos: photos, startIndex: (paged.current - 1) * PHOTOS_PER_PAGE,
+      pager: (({ items, ...p }) => p)(paged), admin, csrfToken: admin ? auth.csrfToken(req) : '',
+    }) });
   });
 
   app.get('/admin/login', (req, res) => {
@@ -185,6 +193,26 @@ export function createApp({ dataDir = path.join(root, 'data'), uploadDir = path.
       }))]);
       res.redirect('/admin?notice=' + encodeURIComponent(`${req.files.length} photo(s) added.`));
     });
+
+  app.post('/admin/sermons/:id/edit', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, async (req, res) => {
+    const title = clean(req.body.title, 140);
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date ?? '') ? req.body.date : '';
+    let found = false;
+    const next = await store.update('sermons', (list) => list.map((s) => {
+      if (s.id !== req.params.id || !title) return s;
+      found = true;
+      return {
+        ...s, title, date,
+        speaker: clean(req.body.speaker, 100), scripture: clean(req.body.scripture, 100),
+        description: clean(req.body.description, 1000),
+      };
+    }));
+    if (!found) return res.status(next.some((s) => s.id === req.params.id) ? 400 : 404).send(view.layout({ title: 'Not found', admin: true, body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }) }));
+    // The list sorts by date, so send the admin to the page where the sermon now sits.
+    const index = sortSermons(next).findIndex((s) => s.id === req.params.id);
+    const pageNo = Math.floor(index / SERMONS_PER_PAGE) + 1;
+    res.redirect(`/sermons${pageNo > 1 ? `?page=${pageNo}` : ''}#sermon-${req.params.id}`);
+  });
 
   app.post('/admin/photos/:id/edit', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, async (req, res) => {
     const caption = clean(req.body.caption, 200);
