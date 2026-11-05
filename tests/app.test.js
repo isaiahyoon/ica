@@ -167,6 +167,9 @@ test('admin can upload, list and delete sermon audio and photos', async (t) => {
   t.after(close);
   const cookie = await login(base);
   const csrf = await csrfToken(base, cookie);
+  const adminPage = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
+  assert.match(adminPage, /id="photo-previews"[^>]*role="list"/);
+  assert.match(adminPage, /URL\.createObjectURL\(file\)/);
 
   const s = new FormData();
   s.set('_csrf', csrf);

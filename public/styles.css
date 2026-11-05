@@ -221,6 +221,10 @@ audio { width: 100%; margin-top: .5rem; }
 .gallery a:hover img { transform: scale(1.03); }
 .gallery p { margin: 0; padding: .7rem 1rem; font: .98rem var(--serif); color: var(--ink); }
 .gallery form { padding: 0 1rem .8rem; }
+.photo-previews { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: .75rem; }
+.photo-previews figure { min-width: 0; margin: 0; padding: .35rem; background: var(--paper); border: 1px solid var(--brass-soft); }
+.photo-previews img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: var(--blue); }
+.photo-previews figcaption { overflow-wrap: anywhere; padding-top: .3rem; font: .8rem var(--sans); color: var(--ink); }
 
 .lightbox { border: 0; padding: 0; background: transparent; max-width: 100vw; max-height: 100vh; width: 100vw; height: 100vh; height: 100dvh; color: #fff; overflow: hidden; }
 .lightbox[open] { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .5rem; padding: 2.5rem 1rem 1.5rem; animation: lightbox-in .25s ease; }
@@ -240,6 +244,7 @@ audio { width: 100%; margin-top: .5rem; }
 .narrow { max-width: 440px; margin: 2rem auto; }
 .admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem; }
 .form { display: grid; gap: 1rem; }
+.form[hidden], .photo-previews[hidden] { display: none; }
 label { display: grid; gap: .55rem; font-weight: 400; color: var(--navy); font-size: .95rem; }
 label small { font-weight: 400; color: var(--muted); }
 input, textarea { font: 400 1rem var(--sans); padding: .65rem .8rem; border: 2px solid; border-image: var(--silver) 1; background: #fff; color: var(--text); width: 100%; }
