@@ -68,19 +68,27 @@ test('public pages render, landing is the information page', async (t) => {
   assert.equal(about.status, 200);
   const aboutHtml = await about.text();
   assert.match(aboutHtml, /<h1>.*About.*소개.*<\/h1>/s);
-  assert.match(aboutHtml, /More about our church is coming soon\./);
+  for (const detail of [
+    'We are a family church.', 'Our preaching is biblically sound.',
+    'late 19th and 20th centuries', 'We affirm the Apostles’ Creed and the Lord’s Prayer.',
+    'John Yoon', '(윤태선)', 'href="tel:+13237312323"',
+    'Joshua Won', '(원여호수아)', 'href="tel:+12132105582"',
+    'Kyu Ho Yeo', '(여규호)', 'href="tel:+12135037883"',
+    'Hyi Shik Lee', '(이희식)', 'href="tel:+12132486700"',
+  ]) assert.ok(aboutHtml.includes(detail), `About page should include "${detail}"`);
   assert.match(aboutHtml, /href="\/about" aria-current="page" class="is-active"/);
   const contact = await fetch(`${base}/contact`);
   assert.equal(contact.status, 200);
   const contactHtml = await contact.text();
   assert.match(contactHtml, /<h1>.*Contact.*연락처/s);
   assert.match(contactHtml, /class="contact-scripture cornerstone"[\s\S]*<img src="\/favicon\.png" alt="Immanuel Church of America logo"/);
+  assert.match(contactHtml, /The Mirror of the Word<\/span>[\s\S]*<img src="\/favicon\.png"[\s\S]*말씀의 거울/);
   assert.match(contactHtml, /For now we see through a glass, darkly;.*1 Corinthians 13:12/s);
   assert.match(contactHtml, /고린도전서 13:12/);
   assert.match(contactHtml, /href="https:\/\/www\.google\.com\/maps\/place\/Immanuel\+Church\+of\+America\+%2F\+%EB%AF%B8%EC%A3%BC%EC%9E%84%EB%A7%88%EB%88%84%EC%97%98%EA%B5%90%ED%9A%8C\/@34\.0397122,-118\.3242422,17z\/data=!3m1!4b1!4m6!3m5!1s0x80c2b867941260c9:0xc64dfc88582a36a6!8m2!3d34\.0397078!4d-118\.3216673!16s%2Fg%2F1262s7wvv\?entry=ttu&amp;g_ep=EgoyMDI2MTEwMi4wIKXMDSoASAFQAw%3D%3D" target="_blank" rel="noopener noreferrer">[\s\S]*3406 W Washington Blvd 2F<br>Los Angeles, CA 90019/);
   assert.match(contactHtml, /href="https:\/\/www\.instagram\.com\/immanuelchurchofamerica\/" target="_blank" rel="noopener noreferrer">@immanuelchurchofamerica/);
   for (const detail of [
-    'Sunday: 9:00 am, 11:00 am, and 2:30 pm',
+    'Sunday: 9:00 am, 11:00 am, and 2:00 pm',
     'Wednesday: 7:30 pm',
     'Friday: 7:30 pm',
     'Lunch is provided after the 11:00 am Sunday service.',

@@ -7,7 +7,7 @@ Church website prototype.
 ## Features
 
 - **Information page** (landing page, `/`) — welcome and overview; About details to come.
-- **About** (`/about`) — bilingual introduction page; detailed content is coming soon.
+- **About** (`/about`) — bilingual page on our family church, worship style, preaching, what we affirm, and leadership with contact numbers.
 - **Sermons** (`/sermons`) — public audio player list.
 - **Gallery** (`/gallery`) — public photo gallery.
 - **Contact** (`/contact`) — address with a Google Maps link, worship times, visitor details, and Instagram; includes 1 Corinthians 13:12 beside the church logo and is linked from the Connect card on the welcome page.
