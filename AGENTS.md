@@ -17,6 +17,7 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 
 - `/` — Information page (the landing page). Detailed About content is pending from the owner; keep placeholders honest ("coming soon"), never invent service times, addresses, or doctrine.
 - `/sermons` — public audio list; `/gallery` — public photo gallery.
+- `/font-study.html` — standalone English and Korean typeface specimen.
 - `/admin` — sign-in required; upload/delete sermon audio and gallery photos.
 
 ## Running locally
@@ -35,8 +36,8 @@ The look draws from the sibling project `src/word` (KRV edition: `styles/theme.c
 
 - **Dominantly blue.** Page background is the KRV gradient (`#bed8ea → #e8f1f4 → #c3d3e5`), light blue `#defefc`, mid blue `#72c6d3`.
 - **Navy `#223b55`** for regal surfaces: header, footer, hero, headings. Pair with brass `#dfc681` / `#a97c35` rules and highlights.
-- **Accents, used sparingly** (cards, borders, glows): pink `#fad4e0`, lavender `#dcd7f7`, yellow `#fffecf`. Never let accents outweigh blue.
-- **Type:** Gelasio (serif, headings/verses), DM Sans (UI/body), Noto Serif KR for Korean text. Scripture and quotes in italic serif.
+- **Accents, used liberally** (cards, borders, glows): pink `#fad4e0`, lavender `#dcd7f7`, yellow `#fffecf`. Never let accents outweigh blue.
+- **Type:** English uses regular-weight Cormorant Garamond (serif) and Optima (sans-serif); Korean uses Noto Serif KR (serif) and Noto Sans KR (sans-serif). Serif is for headings and all Scripture; sans-serif is for body copy, buttons, and explanatory text. Scripture must always use serif and no text is italicized. Provide Korean alongside all fixed English interface/copy, with comfortable separation between language lines.
 - **Shape:** soft radii (16px cards, pill buttons), gentle navy-tinted shadows, generous whitespace.
 - All colors are CSS variables in `:root` of `public/styles.css`; don't hard-code new hex values in components.
 - Accessibility: visible focus rings, skip link, sufficient contrast, `prefers-reduced-motion` respected, responsive down to phones, alt text on photos.
