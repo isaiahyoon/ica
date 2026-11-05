@@ -8,7 +8,7 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 
 - `server.js` — `createApp()` factory and routes (public pages, admin login, uploads, deletes).
 - `lib/render.js` — all HTML templates. Always escape user content with `esc()`.
-- `lib/auth.js` — password + signed HttpOnly SameSite=Strict cookie, login throttle.
+- `lib/auth.js` — admin password validation, revocable HttpOnly session cookie, CSRF tokens, and bounded login throttling.
 - `lib/store.js` — JSON-file store in `data/` (git-ignored). Uploaded files live in `uploads/` (git-ignored).
 - `public/styles.css` — the single stylesheet and all design tokens.
 - `tests/` — `node --test` end-to-end tests.
@@ -31,7 +31,8 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 
 ## Upload & security rules
 
-- Admin-only routes must use `auth.requireAdmin`.
+- Admin-only routes must use `auth.requireAdmin`; state-changing admin routes must also enforce same-origin and CSRF checks.
+- Production requires `ADMIN_SESSION_SECRET` (at least 32 bytes), HTTPS, and a unique `ADMIN_PASSWORD` of at least 16 non-whitespace characters. Session and rate-limit state are single-process only; use shared stores before horizontal scaling.
 - Uploads are whitelisted by extension **and** MIME prefix, size-limited, and stored under unique generated (UUID) names (never the user's filename). No SVG/HTML uploads.
 - Never commit `data/`, `uploads/`, or secrets.
 

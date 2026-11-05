@@ -5,76 +5,195 @@ import os from 'node:os';
 import path from 'node:path';
 import { createApp } from '../server.js';
 
+const PASSWORD = 'correct horse battery staple';
+
 async function boot() {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ica-'));
   await fs.mkdir(path.join(tmp, 'uploads/audio'), { recursive: true });
   await fs.mkdir(path.join(tmp, 'uploads/photos'), { recursive: true });
-  const app = createApp({ dataDir: path.join(tmp, 'data'), uploadDir: path.join(tmp, 'uploads'), password: 'amen' });
+  const app = createApp({ dataDir: path.join(tmp, 'data'), uploadDir: path.join(tmp, 'uploads'), password: PASSWORD });
   const server = app.listen(0);
   const base = `http://localhost:${server.address().port}`;
-  return { base, close: () => server.close() };
+  return {
+    base,
+    uploadDir: path.join(tmp, 'uploads'),
+    close: async () => {
+      const closed = new Promise((resolve) => server.close(resolve));
+      server.closeAllConnections();
+      await closed;
+      await fs.rm(tmp, { recursive: true, force: true });
+    },
+  };
 }
 
 async function login(base) {
   const res = await fetch(`${base}/admin/login`, {
     method: 'POST', redirect: 'manual',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: 'password=amen',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+    body: new URLSearchParams({ password: PASSWORD }),
   });
   assert.equal(res.status, 302);
   return res.headers.get('set-cookie').split(';')[0];
 }
 
-test('public pages render, landing is the information page', async () => {
+async function csrfToken(base, cookie) {
+  const html = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
+  return html.match(/name="_csrf" value="([^"]+)"/)[1];
+}
+
+test('public pages render, landing is the information page', async (t) => {
   const { base, close } = await boot();
+  t.after(close);
   const home = await (await fetch(base)).text();
   assert.match(home, /Immanuel Church of America/);
   assert.match(home, /<link rel="icon" href="\/favicon\.png" type="image\/png">/);
-  assert.match(home, /<img class="brand-mark" src="\/favicon\.png"/);
+  assert.match(home, /<img class="brand-mark" src="\/favicon.png"/);
   assert.equal((await fetch(`${base}/favicon.png`)).status, 200);
   assert.equal((await fetch(`${base}/instagram-profile.png`)).status, 200);
   for (const p of ['/sermons', '/gallery']) assert.equal((await fetch(base + p)).status, 200);
   assert.equal((await fetch(base + '/nope')).status, 404);
-  close();
 });
 
-test('admin routes require sign in; bad password rejected', async () => {
+test('admin routes require sign in; missing and incorrect passwords are rejected', async (t) => {
   const { base, close } = await boot();
+  t.after(close);
+  assert.throws(() => createApp({ password: 'too-short' }), /16 non-whitespace characters/);
   const r = await fetch(`${base}/admin`, { redirect: 'manual' });
   assert.equal(r.status, 302);
   const form = new FormData(); form.set('title', 'x');
   assert.equal((await fetch(`${base}/admin/sermons`, { method: 'POST', body: form, redirect: 'manual' })).status, 302);
-  const bad = await fetch(`${base}/admin/login`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'password=no' });
-  assert.equal(bad.status, 401);
-  close();
+
+  for (const password of ['', 'incorrect password']) {
+    const bad = await fetch(`${base}/admin/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+      body: new URLSearchParams({ password }),
+    });
+    assert.equal(bad.status, 401);
+    assert.equal(bad.headers.get('set-cookie'), null);
+  }
 });
 
-test('admin can upload, list and delete sermon audio and photos', async () => {
+test('admin sessions use hardened cookies, require CSRF tokens, and revoke on logout', async (t) => {
   const { base, close } = await boot();
+  t.after(close);
+  const loginResponse = await fetch(`${base}/admin/login`, {
+    method: 'POST', redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+    body: new URLSearchParams({ password: PASSWORD }),
+  });
+  assert.equal(loginResponse.status, 302);
+  const setCookie = loginResponse.headers.get('set-cookie');
+  assert.match(setCookie, /HttpOnly/i);
+  assert.match(setCookie, /SameSite=Strict/i);
+  assert.match(setCookie, /Path=\//i);
+  assert.match(setCookie, /Max-Age=28800/i);
+  assert.doesNotMatch(setCookie, /;\s*Domain=/i);
+  const cookie = setCookie.split(';')[0];
+  const [name, value] = cookie.split('=');
+  const forgedCookie = `${name}=${value.slice(0, -1)}${value.endsWith('A') ? 'B' : 'A'}`;
+  assert.equal((await fetch(`${base}/admin`, { headers: { cookie: forgedCookie }, redirect: 'manual' })).status, 302);
+  const privatePage = await fetch(`${base}/admin`, { headers: { cookie } });
+  assert.match(privatePage.headers.get('cache-control'), /no-store/i);
+  const csrf = await csrfToken(base, cookie);
+
+  const rejectedLogout = await fetch(`${base}/admin/logout`, {
+    method: 'POST', redirect: 'manual',
+    headers: { cookie, origin: base, 'content-type': 'application/x-www-form-urlencoded' },
+    body: '',
+  });
+  assert.equal(rejectedLogout.status, 403);
+  assert.equal((await fetch(`${base}/admin`, { headers: { cookie }, redirect: 'manual' })).status, 200);
+
+  const logout = await fetch(`${base}/admin/logout`, {
+    method: 'POST', redirect: 'manual',
+    headers: { cookie, origin: base, 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: csrf }),
+  });
+  assert.equal(logout.status, 302);
+  assert.match(logout.headers.get('set-cookie'), /Expires=Thu, 01 Jan 1970/i);
+  assert.equal((await fetch(`${base}/admin`, { headers: { cookie }, redirect: 'manual' })).status, 302);
+});
+
+test('admin login enforces same-origin requests and throttles failed attempts', async (t) => {
+  const { base, close } = await boot();
+  t.after(close);
+  const crossOrigin = await fetch(`${base}/admin/login`, {
+    method: 'POST', redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', origin: 'https://attacker.example' },
+    body: new URLSearchParams({ password: PASSWORD }),
+  });
+  assert.equal(crossOrigin.status, 403);
+  const noOrigin = await fetch(`${base}/admin/login`, {
+    method: 'POST', redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ password: PASSWORD }),
+  });
+  assert.equal(noOrigin.status, 403);
+
+  for (let i = 0; i < 8; i++) {
+    const response = await fetch(`${base}/admin/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+      body: new URLSearchParams({ password: 'incorrect password' }),
+    });
+    assert.equal(response.status, 401);
+  }
+  const limited = await fetch(`${base}/admin/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+    body: new URLSearchParams({ password: PASSWORD }),
+  });
+  assert.equal(limited.status, 429);
+  assert.ok(Number(limited.headers.get('retry-after')) > 0);
+  assert.match(limited.headers.get('cache-control'), /no-store/i);
+});
+
+test('admin can upload, list and delete sermon audio and photos', async (t) => {
+  const { base, uploadDir, close } = await boot();
+  t.after(close);
   const cookie = await login(base);
+  const csrf = await csrfToken(base, cookie);
 
   const s = new FormData();
+  s.set('_csrf', csrf);
   s.set('title', '<b>Grace</b>'); s.set('speaker', 'Pastor');
   s.set('audio', new Blob([new Uint8Array([1, 2, 3])], { type: 'audio/mpeg' }), 'a.mp3');
-  assert.equal((await fetch(`${base}/admin/sermons`, { method: 'POST', body: s, headers: { cookie }, redirect: 'manual' })).status, 302);
+  const noCsrf = new FormData();
+  noCsrf.set('title', 'Rejected');
+  noCsrf.set('audio', new Blob(['x'], { type: 'audio/mpeg' }), 'rejected.mp3');
+  const rejectedUpload = await fetch(`${base}/admin/sermons`, {
+    method: 'POST', body: noCsrf, headers: { cookie, origin: base },
+  });
+  assert.equal(rejectedUpload.status, 403);
+  assert.deepEqual(await fs.readdir(path.join(uploadDir, 'audio')), []);
+
+  assert.equal((await fetch(`${base}/admin/sermons`, { method: 'POST', body: s, headers: { cookie, origin: base }, redirect: 'manual' })).status, 302);
   const sermons = await (await fetch(`${base}/sermons`)).text();
   assert.match(sermons, /&lt;b&gt;Grace&lt;\/b&gt;/);
   const src = sermons.match(/src="(\/uploads\/audio\/[^"]+)"/)[1];
   assert.equal((await fetch(base + src)).status, 200);
 
   const bad = new FormData();
+  bad.set('_csrf', csrf);
   bad.set('title', 't'); bad.set('audio', new Blob(['x'], { type: 'text/html' }), 'x.html');
-  assert.equal((await fetch(`${base}/admin/sermons`, { method: 'POST', body: bad, headers: { cookie } })).status, 400);
+  assert.equal((await fetch(`${base}/admin/sermons`, { method: 'POST', body: bad, headers: { cookie, origin: base } })).status, 400);
 
   const p = new FormData();
+  p.set('_csrf', csrf);
   p.append('photos', new Blob([new Uint8Array([1])], { type: 'image/png' }), 'a.png');
   p.set('caption', 'Picnic');
-  assert.equal((await fetch(`${base}/admin/photos`, { method: 'POST', body: p, headers: { cookie }, redirect: 'manual' })).status, 302);
+  assert.equal((await fetch(`${base}/admin/photos`, { method: 'POST', body: p, headers: { cookie, origin: base }, redirect: 'manual' })).status, 302);
   assert.match(await (await fetch(`${base}/gallery`)).text(), /Picnic/);
 
   const admin = await (await fetch(`${base}/sermons`, { headers: { cookie } })).text();
   const del = admin.match(/action="(\/admin\/sermons\/[^"]+)"/)[1];
-  await fetch(base + del, { method: 'POST', headers: { cookie }, redirect: 'manual' });
+  const deleted = await fetch(base + del, {
+    method: 'POST',
+    headers: { cookie, origin: base, 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: csrf }),
+    redirect: 'manual',
+  });
+  assert.equal(deleted.status, 302);
   assert.equal((await fetch(base + src)).status, 404);
-  close();
 });
