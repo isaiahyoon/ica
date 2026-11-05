@@ -5,76 +5,324 @@ import os from 'node:os';
 import path from 'node:path';
 import { createApp } from '../server.js';
 
+const PASSWORD = 'correct horse battery staple';
+
 async function boot() {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ica-'));
   await fs.mkdir(path.join(tmp, 'uploads/audio'), { recursive: true });
   await fs.mkdir(path.join(tmp, 'uploads/photos'), { recursive: true });
-  const app = createApp({ dataDir: path.join(tmp, 'data'), uploadDir: path.join(tmp, 'uploads'), password: 'amen' });
+  const app = createApp({ dataDir: path.join(tmp, 'data'), uploadDir: path.join(tmp, 'uploads'), password: PASSWORD });
   const server = app.listen(0);
   const base = `http://localhost:${server.address().port}`;
-  return { base, close: () => server.close() };
+  return {
+    base,
+    uploadDir: path.join(tmp, 'uploads'),
+    dataDir: path.join(tmp, 'data'),
+    close: async () => {
+      const closed = new Promise((resolve) => server.close(resolve));
+      server.closeAllConnections();
+      await closed;
+      await fs.rm(tmp, { recursive: true, force: true });
+    },
+  };
 }
 
 async function login(base) {
   const res = await fetch(`${base}/admin/login`, {
     method: 'POST', redirect: 'manual',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: 'password=amen',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+    body: new URLSearchParams({ password: PASSWORD }),
   });
   assert.equal(res.status, 302);
   return res.headers.get('set-cookie').split(';')[0];
 }
 
-test('public pages render, landing is the information page', async () => {
+async function csrfToken(base, cookie) {
+  const html = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
+  return html.match(/name="_csrf" value="([^"]+)"/)[1];
+}
+
+test('public pages render, landing is the information page', async (t) => {
   const { base, close } = await boot();
+  t.after(close);
   const home = await (await fetch(base)).text();
   assert.match(home, /Immanuel Church of America/);
+  assert.match(home, /<h1><span class="bilingual"><span lang="en">Immanuel Church of America<\/span><span lang="ko">미주 임마누엘 교회<\/span><\/span><\/h1>/);
+  assert.doesNotMatch(home, /<p class="eyebrow" lang="ko">미주 임마누엘 교회<\/p>/);
   assert.match(home, /<link rel="icon" href="\/favicon\.png" type="image\/png">/);
-  assert.match(home, /<img class="brand-mark" src="\/favicon\.png"/);
+  assert.match(home, /<img class="brand-mark" src="\/favicon.png"/);
+  assert.match(home, /Since 1994/);
   assert.equal((await fetch(`${base}/favicon.png`)).status, 200);
   assert.equal((await fetch(`${base}/instagram-profile.png`)).status, 200);
-  for (const p of ['/sermons', '/gallery']) assert.equal((await fetch(base + p)).status, 200);
+  for (const p of ['/sermons', '/gallery']) {
+    const response = await fetch(base + p);
+    assert.equal(response.status, 200);
+    assert.doesNotMatch(await response.text(), /href="\/admin(?:\/login)?"/);
+  }
+  assert.doesNotMatch(home, /href="\/admin(?:\/login)?"/);
+  assert.match(home, /<a class="brand home-link" href="\/"/);
+  assert.match(home, /<nav[^>]*>[\s\S]*href="\/contact"[\s\S]*<\/nav>/);
+  assert.match(home, /class="btn btn-hero btn-mint" href="\/about"/);
+  assert.match(home, /<nav[^>]*>[\s\S]*href="\/about"[\s\S]*<\/nav>/);
+  const about = await fetch(`${base}/about`);
+  assert.equal(about.status, 200);
+  const aboutHtml = await about.text();
+  assert.match(aboutHtml, /<h1>.*About.*소개.*<\/h1>/s);
+  for (const detail of [
+    'We are a family church.', 'Our preaching is biblically sound.',
+    'late 19th and 20th centuries', 'We affirm the Apostles’ Creed and the Lord’s Prayer.',
+    'John Yoon', '(윤태선)', 'href="tel:+13237312323"',
+    'Joshua Won', '(원여호수아)', 'href="tel:+12132105582"',
+    'Kyu Ho Yeo', '(여규호)', 'href="tel:+12135037883"',
+    'Hyi Shik Lee', '(이희식)', 'href="tel:+12132486700"',
+  ]) assert.ok(aboutHtml.includes(detail), `About page should include "${detail}"`);
+  assert.match(aboutHtml, /href="\/about" aria-current="page" class="is-active"/);
+  const contact = await fetch(`${base}/contact`);
+  assert.equal(contact.status, 200);
+  const contactHtml = await contact.text();
+  assert.match(contactHtml, /<h1>.*Contact.*연락처/s);
+  assert.match(contactHtml, /class="contact-scripture cornerstone"[\s\S]*<img src="\/favicon\.png" alt="Immanuel Church of America logo"/);
+  assert.match(contactHtml, /The Glass of the Word<\/span>[\s\S]*<img src="\/favicon\.png"[\s\S]*말씀의 거울/);
+  assert.match(contactHtml, /For now we see through a glass, darkly;.*1 Corinthians 13:12/s);
+  assert.match(contactHtml, /고린도전서 13:12/);
+  assert.match(contactHtml, /href="https:\/\/www\.google\.com\/maps\/place\/Immanuel\+Church\+of\+America\+%2F\+%EB%AF%B8%EC%A3%BC%EC%9E%84%EB%A7%88%EB%88%84%EC%97%98%EA%B5%90%ED%9A%8C\/@34\.0397122,-118\.3242422,17z\/data=!3m1!4b1!4m6!3m5!1s0x80c2b867941260c9:0xc64dfc88582a36a6!8m2!3d34\.0397078!4d-118\.3216673!16s%2Fg%2F1262s7wvv\?entry=ttu&amp;g_ep=EgoyMDI2MTEwMi4wIKXMDSoASAFQAw%3D%3D" target="_blank" rel="noopener noreferrer">[\s\S]*3406 W Washington Blvd 2F<br>Los Angeles, CA 90019/);
+  assert.match(contactHtml, /href="https:\/\/www\.instagram\.com\/immanuelchurchofamerica\/" target="_blank" rel="noopener noreferrer">@immanuelchurchofamerica/);
+  for (const detail of [
+    'Sunday: 9:00 am, 11:00 am, and 2:00 pm',
+    'Wednesday: 7:30 pm',
+    'Friday: 7:30 pm',
+    'Lunch is provided after the 11:00 am Sunday service.',
+    'English interpretation is available on request.',
+    'Free parking is available',
+    'Our church is ADA accessible, with an elevator available to take you to the second floor.',
+    '엘리베이터로 2층까지 이동하실 수 있습니다.',
+    'All are welcome.',
+    '주일: 오전 9시, 오전 11시, 오후 2시',
+    '수요일: 오후 7시 30분',
+    '금요일: 오후 7시 30분',
+  ]) assert.ok(contactHtml.includes(detail), `Contact page should include "${detail}"`);
+  const loginPage = await (await fetch(`${base}/admin/login`)).text();
+  assert.match(loginPage, /<form method="post" action="\/admin\/login"/);
+  assert.doesNotMatch(loginPage, /href="\/admin(?:\/login)?"/);
   assert.equal((await fetch(base + '/nope')).status, 404);
-  close();
 });
 
-test('admin routes require sign in; bad password rejected', async () => {
+test('admin routes require sign in; missing and incorrect passwords are rejected', async (t) => {
   const { base, close } = await boot();
+  t.after(close);
+  assert.throws(() => createApp({ password: 'too-short' }), /16 non-whitespace characters/);
   const r = await fetch(`${base}/admin`, { redirect: 'manual' });
   assert.equal(r.status, 302);
   const form = new FormData(); form.set('title', 'x');
   assert.equal((await fetch(`${base}/admin/sermons`, { method: 'POST', body: form, redirect: 'manual' })).status, 302);
-  const bad = await fetch(`${base}/admin/login`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'password=no' });
-  assert.equal(bad.status, 401);
-  close();
+
+  for (const password of ['', 'incorrect password']) {
+    const bad = await fetch(`${base}/admin/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+      body: new URLSearchParams({ password }),
+    });
+    assert.equal(bad.status, 401);
+    assert.equal(bad.headers.get('set-cookie'), null);
+  }
 });
 
-test('admin can upload, list and delete sermon audio and photos', async () => {
+test('admin sessions use hardened cookies, require CSRF tokens, and revoke on logout', async (t) => {
   const { base, close } = await boot();
+  t.after(close);
+  const loginResponse = await fetch(`${base}/admin/login`, {
+    method: 'POST', redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+    body: new URLSearchParams({ password: PASSWORD }),
+  });
+  assert.equal(loginResponse.status, 302);
+  const setCookie = loginResponse.headers.get('set-cookie');
+  assert.match(setCookie, /HttpOnly/i);
+  assert.match(setCookie, /SameSite=Strict/i);
+  assert.match(setCookie, /Path=\//i);
+  assert.match(setCookie, /Max-Age=28800/i);
+  assert.doesNotMatch(setCookie, /;\s*Domain=/i);
+  const cookie = setCookie.split(';')[0];
+  const [name, value] = cookie.split('=');
+  const forgedCookie = `${name}=${value.slice(0, -1)}${value.endsWith('A') ? 'B' : 'A'}`;
+  assert.equal((await fetch(`${base}/admin`, { headers: { cookie: forgedCookie }, redirect: 'manual' })).status, 302);
+  const privatePage = await fetch(`${base}/admin`, { headers: { cookie } });
+  assert.match(privatePage.headers.get('cache-control'), /no-store/i);
+  const csrf = await csrfToken(base, cookie);
+
+  const rejectedLogout = await fetch(`${base}/admin/logout`, {
+    method: 'POST', redirect: 'manual',
+    headers: { cookie, origin: base, 'content-type': 'application/x-www-form-urlencoded' },
+    body: '',
+  });
+  assert.equal(rejectedLogout.status, 403);
+  assert.equal((await fetch(`${base}/admin`, { headers: { cookie }, redirect: 'manual' })).status, 200);
+
+  const logout = await fetch(`${base}/admin/logout`, {
+    method: 'POST', redirect: 'manual',
+    headers: { cookie, origin: base, 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: csrf }),
+  });
+  assert.equal(logout.status, 302);
+  assert.match(logout.headers.get('set-cookie'), /Expires=Thu, 01 Jan 1970/i);
+  assert.equal((await fetch(`${base}/admin`, { headers: { cookie }, redirect: 'manual' })).status, 302);
+});
+
+test('admin login enforces same-origin requests and throttles failed attempts', async (t) => {
+  const { base, close } = await boot();
+  t.after(close);
+  const crossOrigin = await fetch(`${base}/admin/login`, {
+    method: 'POST', redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', origin: 'https://attacker.example' },
+    body: new URLSearchParams({ password: PASSWORD }),
+  });
+  assert.equal(crossOrigin.status, 403);
+  const noOrigin = await fetch(`${base}/admin/login`, {
+    method: 'POST', redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ password: PASSWORD }),
+  });
+  assert.equal(noOrigin.status, 403);
+
+  for (let i = 0; i < 8; i++) {
+    const response = await fetch(`${base}/admin/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+      body: new URLSearchParams({ password: 'incorrect password' }),
+    });
+    assert.equal(response.status, 401);
+  }
+  const limited = await fetch(`${base}/admin/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
+    body: new URLSearchParams({ password: PASSWORD }),
+  });
+  assert.equal(limited.status, 429);
+  assert.ok(Number(limited.headers.get('retry-after')) > 0);
+  assert.match(limited.headers.get('cache-control'), /no-store/i);
+});
+
+test('admin can upload, list and delete sermon audio and photos', async (t) => {
+  const { base, uploadDir, close } = await boot();
+  t.after(close);
   const cookie = await login(base);
+  const csrf = await csrfToken(base, cookie);
+  const adminPage = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
+  assert.match(adminPage, /href="\/gallery"><span class="bilingual"><span lang="en">Manage gallery<\/span>/);
+  assert.match(adminPage, /id="photo-captions" class="photo-upload-list" role="list"/);
+  assert.match(adminPage, /URL\.createObjectURL\(file\)/);
+  assert.match(adminPage, /row\.append\(figure, label\)/);
 
   const s = new FormData();
+  s.set('_csrf', csrf);
   s.set('title', '<b>Grace</b>'); s.set('speaker', 'Pastor');
   s.set('audio', new Blob([new Uint8Array([1, 2, 3])], { type: 'audio/mpeg' }), 'a.mp3');
-  assert.equal((await fetch(`${base}/admin/sermons`, { method: 'POST', body: s, headers: { cookie }, redirect: 'manual' })).status, 302);
+  const noCsrf = new FormData();
+  noCsrf.set('title', 'Rejected');
+  noCsrf.set('audio', new Blob(['x'], { type: 'audio/mpeg' }), 'rejected.mp3');
+  const rejectedUpload = await fetch(`${base}/admin/sermons`, {
+    method: 'POST', body: noCsrf, headers: { cookie, origin: base },
+  });
+  assert.equal(rejectedUpload.status, 403);
+  assert.deepEqual(await fs.readdir(path.join(uploadDir, 'audio')), []);
+
+  assert.equal((await fetch(`${base}/admin/sermons`, { method: 'POST', body: s, headers: { cookie, origin: base }, redirect: 'manual' })).status, 302);
   const sermons = await (await fetch(`${base}/sermons`)).text();
   assert.match(sermons, /&lt;b&gt;Grace&lt;\/b&gt;/);
+  const sid = sermons.match(/id="sermon-([^"]+)"/)[1];
+  assert.match(sermons, new RegExp(`href="/sermons#sermon-${sid}"`));
   const src = sermons.match(/src="(\/uploads\/audio\/[^"]+)"/)[1];
   assert.equal((await fetch(base + src)).status, 200);
 
+  assert.doesNotMatch(sermons, /\/edit/);
+  const sedit = (fields) => fetch(`${base}/admin/sermons/${sid}/edit`, { method: 'POST', body: new URLSearchParams({ _csrf: csrf, ...fields }), headers: { cookie, origin: base }, redirect: 'manual' });
+  assert.equal((await sedit({ title: 'Renamed <b>', speaker: 'Pastor Kim', date: '2001-02-03' })).status, 302);
+  const renamed = await (await fetch(`${base}/sermons`, { headers: { cookie } })).text();
+  assert.match(renamed, /Renamed &lt;b&gt;/);
+  assert.match(renamed, /Pastor Kim/);
+  assert.equal((await sedit({ title: '' })).status, 400);
+  assert.equal((await fetch(`${base}/admin/sermons/nope/edit`, { method: 'POST', body: new URLSearchParams({ _csrf: csrf, title: 'x' }), headers: { cookie, origin: base }, redirect: 'manual' })).status, 404);
+  assert.equal((await fetch(`${base}/admin/sermons/${sid}/edit`, { method: 'POST', body: new URLSearchParams({ title: 'x' }), headers: { cookie, origin: base }, redirect: 'manual' })).status, 403);
+
   const bad = new FormData();
+  bad.set('_csrf', csrf);
   bad.set('title', 't'); bad.set('audio', new Blob(['x'], { type: 'text/html' }), 'x.html');
-  assert.equal((await fetch(`${base}/admin/sermons`, { method: 'POST', body: bad, headers: { cookie } })).status, 400);
+  assert.equal((await fetch(`${base}/admin/sermons`, { method: 'POST', body: bad, headers: { cookie, origin: base } })).status, 400);
 
   const p = new FormData();
+  p.set('_csrf', csrf);
   p.append('photos', new Blob([new Uint8Array([1])], { type: 'image/png' }), 'a.png');
   p.set('caption', 'Picnic');
-  assert.equal((await fetch(`${base}/admin/photos`, { method: 'POST', body: p, headers: { cookie }, redirect: 'manual' })).status, 302);
-  assert.match(await (await fetch(`${base}/gallery`)).text(), /Picnic/);
+  assert.equal((await fetch(`${base}/admin/photos`, { method: 'POST', body: p, headers: { cookie, origin: base }, redirect: 'manual' })).status, 302);
+  const publicGallery = await (await fetch(`${base}/gallery`)).text();
+  assert.match(publicGallery, /Picnic/);
+  assert.doesNotMatch(publicGallery, /<form[^>]*class="[^"]*photo-caption-edit|class="lightbox-caption-form"/);
+
+  const b = new FormData();
+  b.set('_csrf', csrf);
+  for (const n of ['b1', 'b2']) b.append('photos', new Blob([new Uint8Array([1])], { type: 'image/png' }), n + '.png');
+  b.set('caption', 'Shared');
+  b.append('captions', 'First one'); b.append('captions', '');
+  assert.equal((await fetch(`${base}/admin/photos`, { method: 'POST', body: b, headers: { cookie, origin: base }, redirect: 'manual' })).status, 302);
+  const gal = await (await fetch(`${base}/gallery`, { headers: { cookie } })).text();
+  assert.match(gal, /First one/);
+  assert.match(gal, /Shared/);
+  assert.match(gal, /class="lightbox-caption-form"/);
+  assert.match(gal, /captionForm\.action = '\/admin\/photos\/' \+ encodeURIComponent\(photo\.id\) \+ '\/edit'/);
+  assert.match(gal, /captionField\.value = photo\.caption \|\| ''/);
+  const pid = gal.match(/\/admin\/photos\/([^/]+)\/edit/)[1];
+  const bodyEdit = new URLSearchParams({ _csrf: csrf, caption: 'Edited <i>' });
+  const edit = await fetch(`${base}/admin/photos/${pid}/edit`, { method: 'POST', body: bodyEdit, headers: { cookie, origin: base }, redirect: 'manual' });
+  assert.equal(edit.status, 302);
+  assert.match(await (await fetch(`${base}/gallery`)).text(), /Edited &lt;i&gt;/);
+
+  const maxBatch = new FormData();
+  maxBatch.set('_csrf', csrf);
+  for (let i = 0; i < 50; i++) {
+    maxBatch.append('photos', new Blob([new Uint8Array([1])], { type: 'image/png' }), `batch-${i}.png`);
+  }
+  const batchUpload = await fetch(`${base}/admin/photos`, {
+    method: 'POST', body: maxBatch, headers: { cookie, origin: base }, redirect: 'manual',
+  });
+  assert.equal(batchUpload.status, 302);
+  assert.equal(new URL(batchUpload.headers.get('location'), base).searchParams.get('notice'), '50 photo(s) added.');
 
   const admin = await (await fetch(`${base}/sermons`, { headers: { cookie } })).text();
-  const del = admin.match(/action="(\/admin\/sermons\/[^"]+)"/)[1];
-  await fetch(base + del, { method: 'POST', headers: { cookie }, redirect: 'manual' });
+  const del = admin.match(/action="(\/admin\/sermons\/[^"]+\/delete)"/)[1];
+  const deleted = await fetch(base + del, {
+    method: 'POST',
+    headers: { cookie, origin: base, 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: csrf }),
+    redirect: 'manual',
+  });
+  assert.equal(deleted.status, 302);
   assert.equal((await fetch(base + src)).status, 404);
-  close();
+});
+
+test('sermons paginate at 10 and gallery at 20', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  const mk = (n, extra) => Array.from({ length: n }, (_, i) => ({
+    id: `id${i}`, title: `T${i}`, caption: `C${i}`, file: `f${i}.mp3`, ...extra(i),
+  }));
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'sermons.json'), JSON.stringify(mk(23, (i) => ({ createdAt: new Date(i * 1000).toISOString() }))));
+  await fs.writeFile(path.join(dataDir, 'photos.json'), JSON.stringify(mk(45, (i) => ({ createdAt: new Date(i * 1000).toISOString() }))));
+  const count = (h, re) => (h.match(re) || []).length;
+  const s1 = await (await fetch(`${base}/sermons`)).text();
+  assert.equal(count(s1, /<article class="sermon"/g), 10);
+  assert.match(s1, /page=2/);
+  assert.match(s1, /class="page-num is-current" aria-current="page">1</);
+  const s3 = await (await fetch(`${base}/sermons?page=3`)).text();
+  assert.match(s3, /class="page-step next is-disabled"/);
+  assert.match(s3, /rel="prev"/);
+  assert.equal(count(s3, /<article class="sermon"/g), 3);
+  assert.equal(count(await (await fetch(`${base}/sermons?page=99`)).text(), /<article class="sermon"/g), 3);
+  assert.equal(count(await (await fetch(`${base}/sermons?page=abc`)).text(), /<article class="sermon"/g), 10);
+  assert.equal(count(await (await fetch(`${base}/gallery`)).text(), /<img src="\/uploads\/photos/g), 20);
+  const galleryPage3 = await (await fetch(`${base}/gallery?page=3`)).text();
+  assert.equal(count(galleryPage3, /<img src="\/uploads\/photos/g), 5);
+  assert.match(galleryPage3, /data-photos="[^"]*id44/);
+  assert.match(galleryPage3, /const startIndex = 40;/);
+  assert.match(galleryPage3, /addEventListener\('wheel'/);
 });

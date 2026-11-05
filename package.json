@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js",
+    "dev": "ADMIN_PASSWORD=testtesttesttest node --watch server.js",
     "test": "node --test"
   },
   "engines": { "node": ">=20" },
