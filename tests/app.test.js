@@ -49,6 +49,7 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(home, /Immanuel Church of America/);
   assert.match(home, /<link rel="icon" href="\/favicon\.png" type="image\/png">/);
   assert.match(home, /<img class="brand-mark" src="\/favicon.png"/);
+  assert.match(home, /Since 1994/);
   assert.equal((await fetch(`${base}/favicon.png`)).status, 200);
   assert.equal((await fetch(`${base}/instagram-profile.png`)).status, 200);
   for (const p of ['/sermons', '/gallery']) {
@@ -57,6 +58,7 @@ test('public pages render, landing is the information page', async (t) => {
     assert.doesNotMatch(await response.text(), /href="\/admin(?:\/login)?"/);
   }
   assert.doesNotMatch(home, /href="\/admin(?:\/login)?"/);
+  assert.match(home, /<a class="brand home-link" href="\/"/);
   assert.match(home, /<nav[^>]*>[\s\S]*href="\/contact"[\s\S]*<\/nav>/);
   const contact = await fetch(`${base}/contact`);
   assert.equal(contact.status, 200);
@@ -168,8 +170,9 @@ test('admin can upload, list and delete sermon audio and photos', async (t) => {
   const cookie = await login(base);
   const csrf = await csrfToken(base, cookie);
   const adminPage = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
-  assert.match(adminPage, /id="photo-previews"[^>]*role="list"/);
+  assert.match(adminPage, /id="photo-captions" class="photo-upload-list" role="list"/);
   assert.match(adminPage, /URL\.createObjectURL\(file\)/);
+  assert.match(adminPage, /row\.append\(figure, label\)/);
 
   const s = new FormData();
   s.set('_csrf', csrf);
@@ -218,6 +221,17 @@ test('admin can upload, list and delete sermon audio and photos', async (t) => {
   const edit = await fetch(`${base}/admin/photos/${pid}/edit`, { method: 'POST', body: bodyEdit, headers: { cookie, origin: base }, redirect: 'manual' });
   assert.equal(edit.status, 302);
   assert.match(await (await fetch(`${base}/gallery`)).text(), /Edited &lt;i&gt;/);
+
+  const maxBatch = new FormData();
+  maxBatch.set('_csrf', csrf);
+  for (let i = 0; i < 50; i++) {
+    maxBatch.append('photos', new Blob([new Uint8Array([1])], { type: 'image/png' }), `batch-${i}.png`);
+  }
+  const batchUpload = await fetch(`${base}/admin/photos`, {
+    method: 'POST', body: maxBatch, headers: { cookie, origin: base }, redirect: 'manual',
+  });
+  assert.equal(batchUpload.status, 302);
+  assert.equal(new URL(batchUpload.headers.get('location'), base).searchParams.get('notice'), '50 photo(s) added.');
 
   const admin = await (await fetch(`${base}/sermons`, { headers: { cookie } })).text();
   const del = admin.match(/action="(\/admin\/sermons\/[^"]+)"/)[1];

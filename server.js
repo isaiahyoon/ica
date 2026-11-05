@@ -172,7 +172,7 @@ export function createApp({ dataDir = path.join(root, 'data'), uploadDir = path.
 
   app.post('/admin/photos', auth.requireAdmin,
     auth.requireSameOrigin,
-    handleUpload(uploader(photoDir, IMAGE, 'image/', 20).array('photos', 20)),
+    handleUpload(uploader(photoDir, IMAGE, 'image/', 50).array('photos', 50)),
     csrfAfterUpload(photoDir),
     async (req, res) => {
       if (!req.files?.length) return adminView(req, res, 400, { error: 'Please choose at least one photo.' });
