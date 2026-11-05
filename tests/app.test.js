@@ -29,6 +29,10 @@ test('public pages render, landing is the information page', async () => {
   const { base, close } = await boot();
   const home = await (await fetch(base)).text();
   assert.match(home, /Immanuel Church of America/);
+  assert.match(home, /<link rel="icon" href="\/favicon\.png" type="image\/png">/);
+  assert.match(home, /<img class="brand-mark" src="\/favicon\.png"/);
+  assert.equal((await fetch(`${base}/favicon.png`)).status, 200);
+  assert.equal((await fetch(`${base}/instagram-profile.png`)).status, 200);
   for (const p of ['/sermons', '/gallery']) assert.equal((await fetch(base + p)).status, 200);
   assert.equal((await fetch(base + '/nope')).status, 404);
   close();
