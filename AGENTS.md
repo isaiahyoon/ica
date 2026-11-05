@@ -38,7 +38,9 @@ The look draws from the sibling project `src/word` (KRV edition: `styles/theme.c
 - **Navy `#223b55`** for regal surfaces: header, footer, hero, headings. Pair with brass `#dfc681` / `#a97c35` rules and highlights.
 - **Accents, used liberally** (cards, borders, glows): pink `#fad4e0`, lavender `#dcd7f7`, yellow `#fffecf`. Never let accents outweigh blue.
 - **Type:** English uses regular-weight Cormorant Garamond (serif) and Optima (sans-serif); Korean uses Noto Serif KR (serif) and Noto Sans KR (sans-serif). Serif is for headings and all Scripture; sans-serif is for body copy, buttons, and explanatory text. Scripture must always use serif and no text is italicized. Provide Korean alongside all fixed English interface/copy, with comfortable separation between language lines.
-- **Shape:** soft radii (16px cards, pill buttons), gentle navy-tinted shadows, generous whitespace.
+- **Shape:** angular and regal, not rounded. Panels, cards, buttons, and the active nav item have chamfered (cut) corners with a metal-plated rim; generous whitespace.
+- **Metal plating:** `--gold` (hero, cornerstone, primary buttons, active nav, header/footer rules), `--silver` (cards, panels, secondary buttons, inputs), `--brass-plate` (warm accents such as gallery frames and alerts). Plated components set `--plate`, `--fill`, `--cut`, and `--rim`; the shared frame rule in `public/styles.css` draws the rim. Fills must be opaque (the plate shows through translucent fills). Add new components to that shared selector list rather than using `border-radius`.
+- **Buttons:** one design — chamfered, gold-plated navy `.btn-primary`; silver-plated `.btn-ghost` for secondary actions. Focus re-plates the control in the focus colour because `clip-path` clips outlines.
 - All colors are CSS variables in `:root` of `public/styles.css`; don't hard-code new hex values in components.
 - Accessibility: visible focus rings, skip link, sufficient contrast, `prefers-reduced-motion` respected, responsive down to phones, alt text on photos.
 
