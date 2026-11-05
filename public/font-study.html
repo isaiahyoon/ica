@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#223b55">
+  <title>English &amp; Korean Font Study · 영어·한국어 서체 연구</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <style>
+    :root {
+      color-scheme: light;
+      font-synthesis: none;
+      --navy: #223b55;
+      --navy-deep: #182b40;
+      --ink: #2b3440;
+      --muted: #5d6c7c;
+      --paper: #fbfdfe;
+      --canvas: #e8f1f4;
+      --sky: #bed8ea;
+      --mist: #c3d3e5;
+      --brass: #a97c35;
+      --brass-soft: #dfc681;
+      --line: rgba(34, 59, 85, .16);
+      --en-serif: "Cormorant Garamond", Georgia, serif;
+      --en-sans: Optima, "Avenir Next", Arial, sans-serif;
+      --ko-serif: "Noto Serif KR", "AppleMyungjo", serif;
+      --ko-sans: "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+      --radius: 16px;
+      --shadow: 0 2px 0 rgba(34, 59, 85, .08), 0 10px 28px rgba(34, 59, 85, .09);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font: 16px/1.6 var(--en-sans);
+      background: linear-gradient(128deg, var(--sky), var(--canvas) 58%, var(--mist)) fixed;
+    }
+    button, input, select { font: inherit; }
+    button:focus-visible, input:focus-visible, a:focus-visible {
+      outline: 3px solid #3f7fa6;
+      outline-offset: 3px;
+    }
+    .masthead {
+      padding: 1rem clamp(1rem, 5vw, 4rem);
+      color: var(--paper);
+      background: linear-gradient(180deg, var(--navy), var(--navy-deep));
+      border-bottom: 3px solid var(--brass-soft);
+    }
+    .masthead-inner, main {
+      width: min(1120px, 100%);
+      margin-inline: auto;
+    }
+    .masthead-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+    .wordmark {
+      margin: 0;
+      color: #fff;
+      font: 400 1.15rem/1.2 var(--en-serif);
+    }
+    .wordmark > span:last-child {
+      display: block;
+      margin-top: .25rem;
+      color: var(--sky);
+      font: 400 .72rem/1.3 var(--en-sans);
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    .bilingual {
+      display: inline-flex;
+      flex-direction: column;
+      gap: .08em;
+      line-height: 1.3;
+      vertical-align: middle;
+    }
+    .bilingual [lang="ko"] { font-family: "Noto Sans KR", "Apple SD Gothic Neo", sans-serif; }
+    .intro h1 .bilingual [lang="ko"],
+    .pairing-card h3 .bilingual [lang="ko"],
+    .scripture-preview .bilingual [lang="ko"] { font-family: "Noto Serif KR", "AppleMyungjo", serif; }
+    .top-note {
+      margin: 0;
+      color: var(--brass-soft);
+      font-family: var(--en-sans);
+      font-size: .82rem;
+      text-align: right;
+    }
+    main { padding: clamp(1.5rem, 5vw, 3.5rem) clamp(1rem, 4vw, 2rem) 4rem; }
+    .intro {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(1.5rem, 5vw, 3.4rem);
+      color: #e8f1f4;
+      text-align: center;
+      background: linear-gradient(145deg, var(--navy), #2d4d6e);
+      border: 1px solid var(--brass-soft);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+    }
+    .intro::before {
+      position: absolute;
+      top: -135px;
+      right: -80px;
+      width: 330px;
+      height: 330px;
+      border-radius: 50%;
+      background: radial-gradient(rgba(220, 215, 247, .34), transparent 68%);
+      content: "";
+      pointer-events: none;
+    }
+    .intro > * { position: relative; }
+    .intro h1 { font-family: var(--en-serif); }
+    .intro-copy, .parents { font-family: var(--en-sans); }
+    .eyebrow {
+      margin: 0 0 .65rem;
+      color: var(--brass-soft);
+      font-family: var(--en-sans);
+      font-size: .76rem;
+      font-weight: 400;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0 auto .8rem;
+      color: #fff;
+      font: 400 clamp(2.2rem, 7vw, 4.5rem)/1.04 var(--en-serif);
+      letter-spacing: -.035em;
+    }
+    .intro-copy {
+      max-width: 42rem;
+      margin: 0 auto;
+      color: #defefc;
+      font-size: clamp(1rem, 2vw, 1.2rem);
+    }
+    .parents {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: .6rem;
+      margin-top: 1.5rem;
+    }
+    .parents span {
+      padding: .35rem .85rem;
+      color: #fff;
+      border: 1px solid rgba(223, 198, 129, .58);
+      border-radius: 999px;
+      font-size: .86rem;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: .85rem;
+      margin: 2rem 0 1.1rem;
+    }
+    .filters { display: flex; flex-wrap: wrap; gap: .45rem; }
+    .filter {
+      padding: .55rem 1rem;
+      color: var(--navy);
+      background: rgba(251, 253, 254, .7);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .filter[aria-pressed="true"] {
+      color: #fff;
+      background: var(--navy);
+      border-color: var(--navy);
+    }
+    .search {
+      width: min(100%, 20rem);
+      padding: .6rem .9rem;
+      color: var(--ink);
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+    }
+    .pairing {
+      margin-top: 2rem;
+      padding: clamp(1.1rem, 3vw, 1.7rem);
+      background: rgba(251, 253, 254, .82);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .pairing-title {
+      margin: 0 0 .3rem;
+      color: var(--navy);
+      font: 400 clamp(1.4rem, 3vw, 1.8rem)/1.2 var(--en-serif);
+    }
+    .pairing-description {
+      margin: 0 0 1.2rem;
+      color: var(--muted);
+      font-size: .92rem;
+    }
+    .pairing-controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+      gap: .75rem;
+      margin-bottom: 1.2rem;
+    }
+    .pairing-controls label {
+      display: grid;
+      gap: .35rem;
+      color: var(--navy);
+      font-family: var(--en-sans);
+      font-size: .85rem;
+      font-weight: 400;
+    }
+    .pairing-controls label[lang="ko"] { font-family: var(--ko-sans); }
+    .pairing-controls select {
+      width: 100%;
+      padding: .6rem .75rem;
+      font-family: inherit;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+    }
+    .pairing-preview {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+      gap: 1rem;
+    }
+    .pairing-card {
+      padding: 1.2rem;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .pairing-card h3 {
+      margin: 0 0 .5rem;
+      color: var(--navy);
+      font: 400 1.65rem/1.2 var(--en-serif);
+    }
+    .pairing-card[lang="ko"] h3 { font-family: var(--ko-serif); }
+    .pairing-body {
+      margin: 0 0 1rem;
+      color: var(--muted);
+      font-family: var(--en-sans);
+      font-size: .95rem;
+    }
+    .pairing-card[lang="ko"] .pairing-body { font-family: var(--ko-sans); }
+    .scripture-preview {
+      margin: 0 0 1rem;
+      padding: .8rem 0 .8rem .9rem;
+      color: var(--navy);
+      border-left: 3px solid var(--brass-soft);
+      font: 1.05rem/1.55 var(--en-serif);
+    }
+    .pairing-card[lang="ko"] .scripture-preview { font-family: var(--ko-serif); }
+    .scripture-preview cite {
+      display: block;
+      margin-top: .35rem;
+      color: var(--muted);
+      font: 400 .75rem/1.4 var(--en-sans);
+    }
+    .pairing-card[lang="ko"] .scripture-preview cite { font-family: var(--ko-sans); }
+    .pairing-button {
+      padding: .55rem .95rem;
+      color: #fff;
+      background: var(--navy);
+      border: 0;
+      border-radius: 999px;
+      font-family: var(--en-sans);
+      font-size: .88rem;
+      cursor: pointer;
+    }
+    .pairing-card[lang="ko"] .pairing-button { font-family: var(--ko-sans); }
+    .pairing-summary {
+      margin: 1rem 0 0;
+      color: var(--muted);
+      font-size: .82rem;
+    }
+    .section-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      margin: 2.5rem 0 1rem;
+      padding-bottom: .7rem;
+      border-bottom: 1px solid rgba(169, 124, 53, .42);
+    }
+    .font-section[data-section="en"] .section-heading h2 {
+      margin: 0;
+      color: var(--navy);
+      font: 400 clamp(1.55rem, 4vw, 2.1rem)/1.2 var(--en-serif);
+    }
+    .font-section[data-section="ko"] .section-heading h2 {
+      margin: 0;
+      color: var(--navy);
+      font: 400 clamp(1.55rem, 4vw, 2.1rem)/1.2 var(--ko-serif);
+    }
+    .section-heading p {
+      margin: 0;
+      color: var(--muted);
+      font-size: .88rem;
+    }
+    .font-section[data-section="ko"] .section-heading p { font-family: var(--ko-sans); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+      gap: 1rem;
+    }
+    .specimen {
+      min-width: 0;
+      padding: 1.2rem 1.3rem 1.25rem;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--brass-soft);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .specimen-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: .75rem;
+      margin-bottom: .85rem;
+    }
+    .specimen h3 {
+      overflow-wrap: anywhere;
+      margin: 0;
+      color: var(--navy);
+      font: 400 1rem/1.3 var(--en-sans);
+    }
+    .source {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: .67rem;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .display {
+      min-height: 5rem;
+      margin: 0 0 .35rem;
+      color: var(--navy);
+      font-size: clamp(1.65rem, 4vw, 2.25rem);
+      line-height: 1.22;
+      overflow-wrap: anywhere;
+    }
+    .sample {
+      margin: 0;
+      color: var(--muted);
+      font-size: .96rem;
+      line-height: 1.65;
+    }
+    .sample .bilingual { gap: .28em; }
+    .sample[lang="ko"] { font-size: 1rem; }
+    .empty {
+      grid-column: 1 / -1;
+      padding: 2rem;
+      color: var(--muted);
+      text-align: center;
+      background: rgba(251, 253, 254, .7);
+      border-radius: var(--radius);
+    }
+    .note {
+      margin: 1.75rem 0 0;
+      padding: 1rem 1.2rem;
+      color: var(--muted);
+      background: rgba(251, 253, 254, .65);
+      border-left: 4px solid var(--brass-soft);
+      border-radius: 0 12px 12px 0;
+      font-size: .9rem;
+    }
+    footer {
+      padding: 1.2rem;
+      color: #e8f1f4;
+      text-align: center;
+      background: var(--navy-deep);
+      font-size: .82rem;
+    }
+    [hidden] { display: none !important; }
+    @media (max-width: 560px) {
+      .masthead-inner { align-items: flex-start; }
+      .top-note { max-width: 9rem; }
+      .controls { align-items: stretch; }
+      .search { width: 100%; }
+      .section-heading { align-items: flex-start; flex-direction: column; gap: .2rem; }
+      .specimen { padding: 1rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <p class="wordmark"><span class="bilingual"><span lang="en">A family type study</span><span lang="ko">가족의 서체 연구</span></span><span>English · 한국어</span></p>
+      <p class="top-note"><span class="bilingual"><span lang="en">Regal in spirit.</span><span lang="ko">기품 있는 마음.</span><span lang="en">Welcoming at heart.</span><span lang="ko">따뜻한 환대.</span></span></p>
+    </div>
+  </header>
+
+  <main>
+    <section class="intro" aria-labelledby="page-title">
+      <p class="eyebrow"><span class="bilingual"><span lang="en">A study in balance</span><span lang="ko">균형을 위한 서체 연구</span></span></p>
+      <h1 id="page-title"><span class="bilingual"><span lang="en">Truth, held with grace.</span><span lang="ko">진실함을 따뜻한 품격으로.</span></span></h1>
+      <p class="intro-copy"><span class="bilingual"><span lang="en">A typographic tribute to John’s clear-eyed strength and Sook Ie’s generous warmth: considered, dignified, and open-hearted.</span><span lang="ko">존의 흔들림 없는 진실함과 숙이의 넉넉한 따뜻함을 담은 서체 헌정입니다. 신중하고 품격 있으면서도 열린 마음을 표현합니다.</span></span></p>
+      <div class="parents" aria-label="The qualities behind this study · 이 서체 연구에 담긴 가치">
+        <span class="bilingual"><span lang="en">John · truth &amp; steadfastness</span><span lang="ko">존 · 진실함과 굳건함</span></span>
+        <span class="bilingual"><span lang="en">Sook Ie · kindness &amp; welcome</span><span lang="ko">숙이 · 친절함과 환대</span></span>
+      </div>
+    </section>
+
+    <section class="pairing" aria-labelledby="pairing-heading">
+      <h2 class="pairing-title" id="pairing-heading"><span class="bilingual"><span lang="en">Four fonts, one family</span><span lang="ko">네 가지 서체, 하나의 가족</span></span></h2>
+      <p class="pairing-description"><span class="bilingual"><span lang="en">Choose one serif and one sans for each language. Headings and Scripture stay serif; body copy, buttons, and explanations use sans.</span><span lang="ko">각 언어마다 세리프와 산세리프를 하나씩 선택하세요. 제목과 성경 말씀에는 세리프를, 본문과 버튼 및 설명에는 산세리프를 사용합니다.</span></span></p>
+      <div class="pairing-controls">
+        <label for="en-serif"><span class="bilingual"><span lang="en">English · serif for headings &amp; Scripture</span><span lang="ko">영어 · 제목과 성경 말씀용 세리프</span></span>
+          <select id="en-serif" data-language="en" data-role="serif"></select>
+        </label>
+        <label for="en-sans"><span class="bilingual"><span lang="en">English · sans for body &amp; buttons</span><span lang="ko">영어 · 본문과 버튼용 산세리프</span></span>
+          <select id="en-sans" data-language="en" data-role="sans"></select>
+        </label>
+        <label for="ko-serif"><span class="bilingual"><span lang="en">Korean · serif for headings &amp; Scripture</span><span lang="ko">한국어 · 제목과 성경 말씀용 세리프</span></span>
+          <select id="ko-serif" data-language="ko" data-role="serif"></select>
+        </label>
+        <label for="ko-sans"><span class="bilingual"><span lang="en">Korean · sans for body &amp; buttons</span><span lang="ko">한국어 · 본문과 버튼용 산세리프</span></span>
+          <select id="ko-sans" data-language="ko" data-role="sans"></select>
+        </label>
+      </div>
+      <div class="pairing-preview">
+        <article class="pairing-card" lang="en">
+          <h3><span class="bilingual"><span lang="en">Truth, held with grace.</span><span lang="ko">진실함을 따뜻한 품격으로.</span></span></h3>
+          <p class="pairing-body"><span class="bilingual"><span lang="en">A welcoming home, grounded in truth. Clear words and thoughtful details make room for everyone.</span><span lang="ko">진실 위에 세워진 따뜻한 보금자리. 명확한 말과 세심한 배려로 모두를 위한 자리를 만듭니다.</span></span></p>
+          <blockquote class="scripture-preview"><span class="bilingual"><span lang="en">“God with us.”</span><span lang="ko">“하나님이 우리와 함께 계시다 함이라”</span></span><cite>Matthew 1:23 · 마태복음 1:23</cite></blockquote>
+          <button class="pairing-button" type="button"><span class="bilingual"><span lang="en">You are welcome</span><span lang="ko">환영합니다</span></span></button>
+        </article>
+        <article class="pairing-card" lang="ko">
+          <h3>진실함과 따뜻함</h3>
+          <p class="pairing-body"><span class="bilingual"><span lang="en">A warm welcome grounded in truth. A comfortable place for everyone.</span><span lang="ko">진실 위에 세워진 따뜻한 환대. 모두를 위한 편안한 자리를 만듭니다.</span></span></p>
+          <blockquote class="scripture-preview">“하나님이 우리와 함께 계시다 함이라”<cite>마태복음 1:23 · 개역한글</cite></blockquote>
+          <button class="pairing-button" type="button"><span class="bilingual"><span lang="en">You are welcome</span><span lang="ko">환영합니다</span></span></button>
+        </article>
+      </div>
+      <p class="pairing-summary" id="pairing-summary" aria-live="polite"></p>
+    </section>
+
+    <div class="controls">
+      <div class="filters" role="group" aria-label="Filter specimens · 서체 필터">
+        <button class="filter" type="button" data-filter="all" aria-pressed="true"><span class="bilingual"><span lang="en">All 44</span><span lang="ko">전체 44개</span></span></button>
+        <button class="filter" type="button" data-filter="en" aria-pressed="false"><span class="bilingual"><span lang="en">English 22</span><span lang="ko">영어 22개</span></span></button>
+        <button class="filter" type="button" data-filter="ko" aria-pressed="false"><span class="bilingual"><span lang="en">Korean 22</span><span lang="ko">한국어 22개</span></span></button>
+      </div>
+      <label>
+        <span class="sr-only" hidden>Search font names</span>
+        <input class="search" type="search" placeholder="Search fonts · 서체 검색" aria-label="Search font names · 서체 검색">
+      </label>
+    </div>
+
+    <section class="font-section" data-section="en" aria-labelledby="english-heading">
+      <div class="section-heading">
+        <h2 id="english-heading"><span class="bilingual"><span lang="en">English typefaces</span><span lang="ko">영어 서체</span></span></h2>
+        <p><span class="bilingual"><span lang="en">Authority, clarity, and a little elegance.</span><span lang="ko">권위와 명료함, 그리고 우아함.</span></span></p>
+      </div>
+      <div class="grid" id="english-grid"></div>
+    </section>
+
+    <section class="font-section" data-section="ko" aria-labelledby="korean-heading" lang="ko">
+      <div class="section-heading">
+        <h2 id="korean-heading"><span class="bilingual"><span lang="en">Korean typefaces</span><span lang="ko">한국어 서체</span></span></h2>
+        <p><span class="bilingual"><span lang="en">Steadfast truth and a warm welcome.</span><span lang="ko">단정한 진실함과 따뜻한 환대.</span></span></p>
+      </div>
+      <div class="grid" id="korean-grid"></div>
+    </section>
+
+    <p class="note"><span class="bilingual"><span lang="en">Web fonts load from Google Fonts when you’re online. Fonts not hosted there use your device’s installed copy if available, then a system fallback. For those families, the fallback may not look like the named typeface until you install or license it.</span><span lang="ko">인터넷에 연결되어 있으면 Google Fonts의 웹 폰트가 로드됩니다. 제공되지 않는 글꼴은 기기에 설치된 글꼴을 사용하고, 없으면 시스템 기본 글꼴로 표시됩니다. 해당 글꼴을 설치하거나 라이선스를 취득하기 전에는 실제 모양과 다를 수 있습니다.</span></span></p>
+  </main>
+  <footer><span class="bilingual"><span lang="en">Type is a voice: steadfast, gracious, and inviting.</span><span lang="ko">글자는 굳건하고 품위 있으며 따뜻한 목소리입니다.</span></span></footer>
+
+  <script>
+    const englishFonts = [
+      { name: 'Cormorant Garamond', role: 'serif', web: true, family: '"Cormorant Garamond", Georgia, serif' },
+      { name: 'EB Garamond', role: 'serif', web: true, family: '"EB Garamond", Georgia, serif' },
+      { name: 'Libre Baskerville', role: 'serif', web: true, family: '"Libre Baskerville", Georgia, serif' },
+      { name: 'Spectral', role: 'serif', web: true, family: 'Spectral, Georgia, serif' },
+      { name: 'Source Serif 4', role: 'serif', web: true, family: '"Source Serif 4", Georgia, serif' },
+      { name: 'Lora', role: 'serif', web: true, family: 'Lora, Georgia, serif' },
+      { name: 'Crimson Pro', role: 'serif', web: true, family: '"Crimson Pro", Georgia, serif' },
+      { name: 'Alegreya', role: 'serif', web: true, family: 'Alegreya, Georgia, serif' },
+      { name: 'Literata', role: 'serif', web: true, family: 'Literata, Georgia, serif' },
+      { name: 'Newsreader', role: 'serif', web: true, family: 'Newsreader, Georgia, serif' },
+      { name: 'Playfair Display', role: 'serif', web: true, family: '"Playfair Display", Georgia, serif' },
+      { name: 'DM Serif Display', role: 'serif', web: true, family: '"DM Serif Display", Georgia, serif' },
+      { name: 'Bodoni Moda', role: 'serif', web: true, family: '"Bodoni Moda", Georgia, serif' },
+      { name: 'Fraunces', role: 'serif', web: true, family: 'Fraunces, Georgia, serif' },
+      { name: 'Merriweather', role: 'serif', web: true, family: 'Merriweather, Georgia, serif' },
+      { name: 'Cardo', role: 'serif', web: true, family: 'Cardo, Georgia, serif' },
+      { name: 'Optima', role: 'sans', family: 'Optima, "Avenir Next", sans-serif' },
+      { name: 'Avenir Next', role: 'sans', family: '"Avenir Next", Avenir, sans-serif' },
+      { name: 'Source Sans 3', role: 'sans', web: true, family: '"Source Sans 3", Arial, sans-serif' },
+      { name: 'Lato', role: 'sans', web: true, family: 'Lato, Arial, sans-serif' },
+      { name: 'Inter', role: 'sans', web: true, family: 'Inter, Arial, sans-serif' },
+      { name: 'Nunito Sans', role: 'sans', web: true, family: '"Nunito Sans", Arial, sans-serif' },
+    ];
+
+    const koreanFonts = [
+      { name: 'Gowun Batang', role: 'serif', web: true, family: '"Gowun Batang", "AppleMyungjo", serif' },
+      { name: 'MaruBuri', role: 'serif', family: 'MaruBuri, "AppleMyungjo", serif' },
+      { name: 'Nanum Myeongjo', role: 'serif', web: true, family: '"Nanum Myeongjo", "AppleMyungjo", serif' },
+      { name: 'Noto Serif KR', role: 'serif', web: true, family: '"Noto Serif KR", "AppleMyungjo", serif' },
+      { name: 'KoPub Batang', role: 'serif', family: '"KoPub Batang", "AppleMyungjo", serif' },
+      { name: 'Song Myung', role: 'serif', web: true, family: '"Song Myung", "AppleMyungjo", serif' },
+      { name: 'Jeju Myeongjo', role: 'serif', family: '"Jeju Myeongjo", "AppleMyungjo", serif' },
+      { name: 'Eulyoo 1945', role: 'serif', family: '"Eulyoo 1945", "AppleMyungjo", serif' },
+      { name: 'RIDIBatang', role: 'serif', family: 'RIDIBatang, "AppleMyungjo", serif' },
+      { name: 'Sandoll MyeongjoNeo1', role: 'serif', family: '"Sandoll MyeongjoNeo1", "AppleMyungjo", serif' },
+      { name: 'Gowun Dodum', role: 'sans', web: true, family: '"Gowun Dodum", "Apple SD Gothic Neo", sans-serif' },
+      { name: 'Noto Sans KR', role: 'sans', web: true, family: '"Noto Sans KR", "Apple SD Gothic Neo", sans-serif' },
+      { name: 'Nanum Gothic', role: 'sans', web: true, family: '"Nanum Gothic", "Apple SD Gothic Neo", sans-serif' },
+      { name: 'IBM Plex Sans KR', role: 'sans', web: true, family: '"IBM Plex Sans KR", "Apple SD Gothic Neo", sans-serif' },
+      { name: 'Pretendard', role: 'sans', family: 'Pretendard, "Apple SD Gothic Neo", sans-serif' },
+      { name: 'SUIT', role: 'sans', family: 'SUIT, "Apple SD Gothic Neo", sans-serif' },
+      { name: 'Spoqa Han Sans Neo', role: 'sans', family: '"Spoqa Han Sans Neo", "Apple SD Gothic Neo", sans-serif' },
+      { name: 'LINE Seed Sans KR', role: 'sans', family: '"LINE Seed Sans KR", "Apple SD Gothic Neo", sans-serif' },
+      { name: 'Gmarket Sans', role: 'sans', family: '"Gmarket Sans", "Apple SD Gothic Neo", sans-serif' },
+      { name: 'S-Core Dream', role: 'sans', family: '"S-Core Dream", "Apple SD Gothic Neo", sans-serif' },
+      { name: 'Seoul Namsan', role: 'sans', family: '"Seoul Namsan", "Apple SD Gothic Neo", sans-serif' },
+      { name: 'Seoul Hangang', role: 'serif', family: '"Seoul Hangang", "AppleMyungjo", serif' },
+    ];
+
+    const webFonts = [...englishFonts, ...koreanFonts].filter((font) => font.web);
+    if (webFonts.length) {
+      const stylesheet = new URL('https://fonts.googleapis.com/css2');
+      for (const font of webFonts) stylesheet.searchParams.append('family', `${font.name}:wght@400`);
+      stylesheet.searchParams.set('display', 'swap');
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = stylesheet;
+      document.head.append(link);
+    }
+
+    const makeBilingual = (english, korean, family) => {
+      const wrapper = document.createElement('span');
+      wrapper.className = 'bilingual';
+      for (const [lang, text] of [['en', english], ['ko', korean]]) {
+        const line = document.createElement('span');
+        line.lang = lang;
+        line.textContent = text;
+        if (family) line.style.fontFamily = family;
+        wrapper.append(line);
+      }
+      return wrapper;
+    };
+
+    const makeSpecimen = (font, language) => {
+      const article = document.createElement('article');
+      article.className = 'specimen';
+      article.dataset.language = language;
+      article.dataset.name = font.name.toLowerCase();
+
+      const heading = document.createElement('div');
+      heading.className = 'specimen-header';
+      const name = document.createElement('h3');
+      name.textContent = font.name;
+      const source = document.createElement('span');
+      source.className = 'source';
+      const roleEnglish = font.role === 'serif' ? 'Serif' : 'Sans';
+      const roleKorean = font.role === 'serif' ? '세리프' : '산세리프';
+      source.append(makeBilingual(
+        `${roleEnglish} · ${font.web ? 'web font' : 'system / licensed'}`,
+        `${roleKorean} · ${font.web ? '웹 폰트' : '시스템 / 라이선스'}`,
+      ));
+      heading.append(name, source);
+
+      const display = document.createElement('p');
+      display.className = 'display';
+      display.append(makeBilingual('John & Sook Ie', '존과 숙이', font.family));
+
+      const sample = document.createElement('p');
+      sample.className = 'sample';
+      sample.append(makeBilingual(
+        'Truth, held with grace. A welcome that feels like home.',
+        '진실함을 따뜻한 품격으로. 집처럼 편안한 환대.',
+        font.family,
+      ));
+
+      article.append(heading, display, sample);
+      return article;
+    };
+
+    for (const font of englishFonts) document.querySelector('#english-grid').append(makeSpecimen(font, 'en'));
+    for (const font of koreanFonts) document.querySelector('#korean-grid').append(makeSpecimen(font, 'ko'));
+
+    const selectors = [
+      { id: 'en-serif', fonts: englishFonts, initial: 'Cormorant Garamond', variable: '--en-serif' },
+      { id: 'en-sans', fonts: englishFonts, initial: 'Optima', variable: '--en-sans' },
+      { id: 'ko-serif', fonts: koreanFonts, initial: 'Noto Serif KR', variable: '--ko-serif' },
+      { id: 'ko-sans', fonts: koreanFonts, initial: 'Noto Sans KR', variable: '--ko-sans' },
+    ];
+    const pairingSummary = document.querySelector('#pairing-summary');
+    for (const selector of selectors) {
+      const select = document.getElementById(selector.id);
+      const options = selector.fonts.filter((font) => font.role === (selector.id.endsWith('serif') ? 'serif' : 'sans'));
+      for (const font of options) {
+        const option = document.createElement('option');
+        option.value = font.name;
+        option.textContent = font.name;
+        option.selected = font.name === selector.initial;
+        select.append(option);
+      }
+      const applyFont = () => {
+        const font = options.find((item) => item.name === select.value);
+        document.documentElement.style.setProperty(selector.variable, font.family);
+        pairingSummary.replaceChildren(makeBilingual(
+          `Current pairing: ${document.querySelector('#en-serif').value} + ${document.querySelector('#en-sans').value} for English; ${document.querySelector('#ko-serif').value} + ${document.querySelector('#ko-sans').value} for Korean.`,
+          `현재 조합: 영어 ${document.querySelector('#en-serif').value} + ${document.querySelector('#en-sans').value}; 한국어 ${document.querySelector('#ko-serif').value} + ${document.querySelector('#ko-sans').value}.`,
+        ));
+      };
+      select.addEventListener('change', applyFont);
+      applyFont();
+    }
+
+    const filterButtons = [...document.querySelectorAll('[data-filter]')];
+    const sections = [...document.querySelectorAll('.font-section')];
+    const search = document.querySelector('.search');
+    let activeFilter = 'all';
+
+    function updateView() {
+      const query = search.value.trim().toLowerCase();
+      for (const section of sections) {
+        const sectionMatches = activeFilter === 'all' || section.dataset.section === activeFilter;
+        let visibleCount = 0;
+        for (const card of section.querySelectorAll('.specimen')) {
+          const matches = sectionMatches && card.dataset.name.includes(query);
+          card.hidden = !matches;
+          if (matches) visibleCount++;
+        }
+        section.hidden = visibleCount === 0;
+      }
+      for (const button of filterButtons) {
+        button.setAttribute('aria-pressed', String(button.dataset.filter === activeFilter));
+      }
+    }
+
+    for (const button of filterButtons) {
+      button.addEventListener('click', () => {
+        activeFilter = button.dataset.filter;
+        updateView();
+      });
+    }
+    search.addEventListener('input', updateView);
+  </script>
+</body>
+</html>

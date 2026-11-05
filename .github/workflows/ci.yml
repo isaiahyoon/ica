@@ -1,0 +1,17 @@
+name: CI
+
+# Runs once per push to any branch (including later commits) and on merges to main (a push to main).
+on:
+  push:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test

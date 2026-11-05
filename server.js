@@ -1,0 +1,180 @@
+import express from 'express';
+import multer from 'multer';
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as auth from './lib/auth.js';
+import { createStore } from './lib/store.js';
+import * as view from './lib/render.js';
+
+const root = path.dirname(fileURLToPath(import.meta.url));
+
+const AUDIO = { exts: ['.mp3', '.m4a', '.aac', '.wav', '.ogg'], max: 200 * 1024 * 1024 };
+const IMAGE = { exts: ['.jpg', '.jpeg', '.png', '.webp', '.gif'], max: 15 * 1024 * 1024 };
+
+function uploader(dir, { exts, max }, mimePrefix, files) {
+  return multer({
+    storage: multer.diskStorage({
+      destination: dir,
+      filename: (_req, file, cb) =>
+        cb(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`),
+    }),
+    limits: { fileSize: max, files },
+    fileFilter: (_req, file, cb) => {
+      const ok = exts.includes(path.extname(file.originalname).toLowerCase()) &&
+        (file.mimetype.startsWith(mimePrefix) || file.mimetype === 'application/octet-stream');
+      cb(ok ? null : new Error('That file type is not supported.'), ok);
+    },
+  });
+}
+
+const clean = (s, n) => String(s ?? '').trim().slice(0, n);
+const removeFiles = (dir, names) => Promise.all(names.map((n) => fs.rm(path.join(dir, n), { force: true })));
+
+export function createApp({ dataDir = path.join(root, 'data'), uploadDir = path.join(root, 'uploads'), password }) {
+  const app = express();
+  const store = createStore(dataDir);
+  const audioDir = path.join(uploadDir, 'audio');
+  const photoDir = path.join(uploadDir, 'photos');
+  const pub = path.join(root, 'public');
+
+  app.disable('x-powered-by');
+  app.use((_req, res, next) => {
+    res.set({
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'same-origin',
+      'X-Frame-Options': 'DENY',
+    });
+    next();
+  });
+  app.use(express.urlencoded({ extended: false }));
+  app.use(express.static(pub));
+  app.use('/uploads', express.static(uploadDir, { index: false, dotfiles: 'deny' }));
+
+  const page = (req, res, opts) => res.send(view.layout({ ...opts, admin: auth.isAdmin(req) }));
+
+  app.get('/', (req, res) => page(req, res, { active: 'home', body: view.homePage() }));
+
+  app.get('/sermons', async (req, res) => {
+    const sermons = (await store.read('sermons')).sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.createdAt.localeCompare(a.createdAt));
+    page(req, res, { title: 'Sermons', active: 'sermons', body: view.sermonsPage({ sermons, admin: auth.isAdmin(req) }) });
+  });
+
+  app.get('/gallery', async (req, res) => {
+    const photos = (await store.read('photos')).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    page(req, res, { title: 'Gallery', active: 'gallery', wide: true, body: view.galleryPage({ photos, admin: auth.isAdmin(req) }) });
+  });
+
+  app.get('/admin/login', (req, res) => {
+    if (auth.isAdmin(req)) return res.redirect('/admin');
+    page(req, res, { title: 'Admin sign in', active: 'admin', body: view.loginPage({}) });
+  });
+
+  app.post('/admin/login', (req, res) => {
+    const ip = req.ip;
+    if (auth.loginThrottled(ip)) {
+      return res.status(429).send(view.layout({ title: 'Admin sign in', body: view.loginPage({ error: 'Too many attempts. Please wait a few minutes.' }) }));
+    }
+    if (!auth.checkPassword(req.body.password, password)) {
+      auth.recordFailedLogin(ip);
+      return res.status(401).send(view.layout({ title: 'Admin sign in', body: view.loginPage({ error: 'That password was not correct.' }) }));
+    }
+    auth.issueSession(res);
+    res.redirect('/admin');
+  });
+
+  app.post('/admin/logout', (_req, res) => {
+    auth.clearSession(res);
+    res.redirect('/');
+  });
+
+  const adminView = async (req, res, status = 200, extra = {}) => {
+    const [sermons, photos] = await Promise.all([store.read('sermons'), store.read('photos')]);
+    res.status(status).send(view.layout({
+      title: 'Admin', active: 'admin', admin: true,
+      body: view.adminPage({ sermons, photos, ...extra }),
+    }));
+  };
+
+  app.get('/admin', auth.requireAdmin, (req, res) => adminView(req, res, 200, { notice: req.query.notice }));
+
+  // Wrap multer so upload errors (size, type) render a friendly message.
+  const handleUpload = (mw) => (req, res, next) =>
+    mw(req, res, (err) => {
+      if (!err) return next();
+      const text = err.code === 'LIMIT_FILE_SIZE' ? 'That file is too large.'
+        : err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE' ? 'Too many files.'
+        : err.message;
+      adminView(req, res, 400, { error: text }).catch(next);
+    });
+
+  app.post('/admin/sermons', auth.requireAdmin,
+    handleUpload(uploader(audioDir, AUDIO, 'audio/', 1).single('audio')),
+    async (req, res) => {
+      const title = clean(req.body.title, 140);
+      if (!req.file || !title) {
+        if (req.file) await removeFiles(audioDir, [req.file.filename]);
+        return adminView(req, res, 400, { error: 'A title and an audio file are required.' });
+      }
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date ?? '') ? req.body.date : '';
+      await store.update('sermons', (list) => [...list, {
+        id: crypto.randomUUID(), title, date,
+        speaker: clean(req.body.speaker, 100), scripture: clean(req.body.scripture, 100),
+        description: clean(req.body.description, 1000),
+        file: req.file.filename, createdAt: new Date().toISOString(),
+      }]);
+      res.redirect('/admin?notice=' + encodeURIComponent('Sermon uploaded.'));
+    });
+
+  app.post('/admin/photos', auth.requireAdmin,
+    handleUpload(uploader(photoDir, IMAGE, 'image/', 20).array('photos', 20)),
+    async (req, res) => {
+      if (!req.files?.length) return adminView(req, res, 400, { error: 'Please choose at least one photo.' });
+      const caption = clean(req.body.caption, 200);
+      const now = Date.now();
+      await store.update('photos', (list) => [...list, ...req.files.map((f, i) => ({
+        id: crypto.randomUUID(), caption, file: f.filename,
+        createdAt: new Date(now + i).toISOString(),
+      }))]);
+      res.redirect('/admin?notice=' + encodeURIComponent(`${req.files.length} photo(s) added.`));
+    });
+
+  const remove = (name, dir, back) => async (req, res) => {
+    let gone = [];
+    await store.update(name, (list) => {
+      gone = list.filter((x) => x.id === req.params.id).map((x) => x.file);
+      return list.filter((x) => x.id !== req.params.id);
+    });
+    await removeFiles(dir, gone);
+    res.redirect(back);
+  };
+  app.post('/admin/sermons/:id/delete', auth.requireAdmin, remove('sermons', audioDir, '/sermons'));
+  app.post('/admin/photos/:id/delete', auth.requireAdmin, remove('photos', photoDir, '/gallery'));
+
+  app.use((req, res) => res.status(404).send(view.layout({
+    title: 'Not found', admin: auth.isAdmin(req),
+    body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }),
+  })));
+
+  app.use((err, req, res, _next) => {
+    console.error(err);
+    res.status(500).send(view.layout({
+      title: 'Error', admin: auth.isAdmin(req),
+      body: view.messagePage({ title: 'Something went wrong', text: 'Please try again in a moment.' }),
+    }));
+  });
+
+  return app;
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const { password, generated } = auth.resolveAdminPassword();
+  await fs.mkdir(path.join(root, 'uploads/audio'), { recursive: true });
+  await fs.mkdir(path.join(root, 'uploads/photos'), { recursive: true });
+  const port = Number(process.env.PORT) || 8100;
+  createApp({ password }).listen(port, () => {
+    console.log(`ICA running at http://localhost:${port}`);
+    if (generated) console.log(`Admin password (this run only; set ADMIN_PASSWORD to choose your own): ${password}`);
+  });
+}
