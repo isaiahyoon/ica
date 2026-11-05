@@ -82,7 +82,7 @@ test('public pages render, landing is the information page', async (t) => {
   const contactHtml = await contact.text();
   assert.match(contactHtml, /<h1>.*Contact.*연락처/s);
   assert.match(contactHtml, /class="contact-scripture cornerstone"[\s\S]*<img src="\/favicon\.png" alt="Immanuel Church of America logo"/);
-  assert.match(contactHtml, /The Mirror of the Word<\/span>[\s\S]*<img src="\/favicon\.png"[\s\S]*말씀의 거울/);
+  assert.match(contactHtml, /The Glass of the Word<\/span>[\s\S]*<img src="\/favicon\.png"[\s\S]*말씀의 거울/);
   assert.match(contactHtml, /For now we see through a glass, darkly;.*1 Corinthians 13:12/s);
   assert.match(contactHtml, /고린도전서 13:12/);
   assert.match(contactHtml, /href="https:\/\/www\.google\.com\/maps\/place\/Immanuel\+Church\+of\+America\+%2F\+%EB%AF%B8%EC%A3%BC%EC%9E%84%EB%A7%88%EB%88%84%EC%97%98%EA%B5%90%ED%9A%8C\/@34\.0397122,-118\.3242422,17z\/data=!3m1!4b1!4m6!3m5!1s0x80c2b867941260c9:0xc64dfc88582a36a6!8m2!3d34\.0397078!4d-118\.3216673!16s%2Fg%2F1262s7wvv\?entry=ttu&amp;g_ep=EgoyMDI2MTEwMi4wIKXMDSoASAFQAw%3D%3D" target="_blank" rel="noopener noreferrer">[\s\S]*3406 W Washington Blvd 2F<br>Los Angeles, CA 90019/);
@@ -97,7 +97,7 @@ test('public pages render, landing is the information page', async (t) => {
     'Our church is ADA accessible, with an elevator available to take you to the second floor.',
     '엘리베이터로 2층까지 이동하실 수 있습니다.',
     'All are welcome.',
-    '주일: 오전 9시, 오전 11시, 오후 2시 30분',
+    '주일: 오전 9시, 오전 11시, 오후 2시',
     '수요일: 오후 7시 30분',
     '금요일: 오후 7시 30분',
   ]) assert.ok(contactHtml.includes(detail), `Contact page should include "${detail}"`);
