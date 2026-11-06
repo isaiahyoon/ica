@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { createApp } from '../server.js';
+import * as totp from '../lib/totp.js';
 
 const PASSWORD = 'correct horse battery staple';
 
@@ -27,14 +28,58 @@ async function boot() {
   };
 }
 
-async function login(base) {
-  const res = await fetch(`${base}/admin/login`, {
-    method: 'POST', redirect: 'manual',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
-    body: new URLSearchParams({ password: PASSWORD }),
+const FORM = (base) => ({ 'content-type': 'application/x-www-form-urlencoded', origin: base });
+const secrets = new Map();
+const lastSteps = new Map();
+const cookieOf = (res) => res.headers.get('set-cookie').split(';')[0];
+
+function currentCode(secret) {
+  return totp.codeForStep(secret, totp.stepFor());
+}
+
+// Completes the password and authenticator steps. First use per account sets up the authenticator.
+async function signIn(base, { password = PASSWORD, newPassword, name = 'owner' } = {}) {
+  const first = await fetch(`${base}/admin/login`, {
+    method: 'POST', redirect: 'manual', headers: FORM(base), body: new URLSearchParams({ password }),
   });
-  assert.equal(res.status, 302);
-  return res.headers.get('set-cookie').split(';')[0];
+  assert.equal(first.status, 302);
+  let cookie = cookieOf(first);
+  const key = `${base}:${name}`;
+  if (first.headers.get('location') === '/admin/setup') {
+    const html = await (await fetch(`${base}/admin/setup`, { headers: { cookie } })).text();
+    const secret = base32FromSetup(html);
+    const csrf = html.match(/name="_csrf" value="([^"]+)"/)[1];
+    const body = new URLSearchParams({ _csrf: csrf, code: currentCode(secret) });
+    if (newPassword) { body.set('newPassword', newPassword); body.set('confirmPassword', newPassword); }
+    const done = await fetch(`${base}/admin/setup`, { method: 'POST', headers: { ...FORM(base), cookie }, body });
+    assert.equal(done.status, 200);
+    secrets.set(key, secret);
+    lastSteps.set(key, totp.stepFor());
+    const codes = [...(await done.text()).matchAll(/<code>([A-Z0-9]{5}-[A-Z0-9]{5})<\/code>/g)].map((m) => m[1]);
+    return { cookie: cookieOf(done), setCookie: done.headers.get('set-cookie'), codes, secret };
+  }
+  assert.equal(first.headers.get('location'), '/admin/verify');
+  const html = await (await fetch(`${base}/admin/verify`, { headers: { cookie } })).text();
+  const csrf = html.match(/name="_csrf" value="([^"]+)"/)[1];
+  const secret = secrets.get(key);
+  // A code works once, so move to the next 30-second step when the current one was already used.
+  const step = Math.max(totp.stepFor(), (lastSteps.get(key) ?? 0) + 1);
+  assert.ok(step <= totp.stepFor() + 1, 'too many sign-ins in one time window for this test');
+  lastSteps.set(key, step);
+  const done = await fetch(`${base}/admin/verify`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie },
+    body: new URLSearchParams({ _csrf: csrf, code: totp.codeForStep(secret, step) }),
+  });
+  assert.equal(done.status, 302);
+  return { cookie: cookieOf(done), setCookie: done.headers.get('set-cookie'), secret };
+}
+
+function base32FromSetup(html) {
+  return html.match(/<code>([A-Z2-7 ]+)<\/code>/)[1].replaceAll(' ', '');
+}
+
+async function login(base) {
+  return (await signIn(base)).cookie;
 }
 
 async function csrfToken(base, cookie) {
@@ -53,6 +98,13 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(home, /<img class="brand-mark" src="\/favicon.png"/);
   assert.match(home, /Since 1994/);
   assert.equal((await fetch(`${base}/favicon.png`)).status, 200);
+  assert.match(home, /<meta property="og:image" content="\/link-preview\.png">/);
+  assert.match(home, /<meta property="og:image:width" content="1200">/);
+  assert.match(home, /<meta property="og:image:height" content="630">/);
+  assert.match(home, /<meta name="twitter:card" content="summary_large_image">/);
+  const preview = await fetch(`${base}/link-preview.png`);
+  assert.equal(preview.status, 200);
+  assert.match(preview.headers.get('content-type'), /image\/png/);
   assert.equal((await fetch(`${base}/instagram-profile.png`)).status, 200);
   const sermons = await fetch(`${base}/sermons`);
   assert.equal(sermons.status, 200);
@@ -263,13 +315,7 @@ test('admin routes require sign in; missing and incorrect passwords are rejected
 test('admin sessions use hardened cookies, require CSRF tokens, and revoke on logout', async (t) => {
   const { base, close } = await boot();
   t.after(close);
-  const loginResponse = await fetch(`${base}/admin/login`, {
-    method: 'POST', redirect: 'manual',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', origin: base },
-    body: new URLSearchParams({ password: PASSWORD }),
-  });
-  assert.equal(loginResponse.status, 302);
-  const setCookie = loginResponse.headers.get('set-cookie');
+  const { setCookie } = await signIn(base);
   assert.match(setCookie, /HttpOnly/i);
   assert.match(setCookie, /SameSite=Strict/i);
   assert.match(setCookie, /Path=\//i);
@@ -415,4 +461,153 @@ test('sermons paginate at 10', async (t) => {
   assert.equal(count(s3, /<article class="sermon"/g), 3);
   assert.equal(count(await (await fetch(`${base}/sermons?page=99`)).text(), /<article class="sermon"/g), 3);
   assert.equal(count(await (await fetch(`${base}/sermons?page=abc`)).text(), /<article class="sermon"/g), 10);
+});
+
+test('TOTP matches the RFC 6238 test vector', () => {
+  const secret = totp.base32Encode(Buffer.from('12345678901234567890'));
+  assert.equal(totp.codeForStep(secret, 1), '287082');
+  assert.equal(totp.verifyCode(secret, '287082', 59_000), 1);
+  assert.equal(totp.verifyCode(secret, '000000', 59_000), null);
+});
+
+test('password alone never opens the admin area; setup and code steps need a pending session', async (t) => {
+  const { base, close } = await boot();
+  t.after(close);
+  for (const route of ['/admin/setup', '/admin/verify']) {
+    const res = await fetch(`${base}${route}`, { redirect: 'manual' });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.get('location'), '/admin/login');
+  }
+  const first = await fetch(`${base}/admin/login`, {
+    method: 'POST', redirect: 'manual', headers: FORM(base), body: new URLSearchParams({ password: PASSWORD }),
+  });
+  const cookie = cookieOf(first);
+  assert.equal(first.headers.get('location'), '/admin/setup');
+  assert.equal((await fetch(`${base}/admin`, { headers: { cookie }, redirect: 'manual' })).status, 302);
+  const html = await (await fetch(`${base}/admin/setup`, { headers: { cookie } })).text();
+  assert.match(html, /<svg/);
+  assert.match(html, /Google Authenticator/);
+  assert.match(html, /구글|Authenticator/);
+  const csrf = html.match(/name="_csrf" value="([^"]+)"/)[1];
+  const wrong = await fetch(`${base}/admin/setup`, {
+    method: 'POST', headers: { ...FORM(base), cookie }, body: new URLSearchParams({ _csrf: csrf, code: '000000' }),
+  });
+  assert.equal(wrong.status, 400);
+  assert.equal((await fetch(`${base}/admin`, { headers: { cookie }, redirect: 'manual' })).status, 302);
+  const noCsrf = await fetch(`${base}/admin/setup`, {
+    method: 'POST', headers: { ...FORM(base), cookie }, body: new URLSearchParams({ code: currentCode(base32FromSetup(html)) }),
+  });
+  assert.equal(noCsrf.status, 403);
+});
+
+test('second step rejects wrong and replayed codes, and recovery codes work once', async (t) => {
+  const { base, close } = await boot();
+  t.after(close);
+  const { codes, secret } = await signIn(base);
+  assert.equal(codes.length, 8);
+
+  const attempt = async (code) => {
+    const first = await fetch(`${base}/admin/login`, {
+      method: 'POST', redirect: 'manual', headers: FORM(base), body: new URLSearchParams({ password: PASSWORD }),
+    });
+    const cookie = cookieOf(first);
+    assert.equal(first.headers.get('location'), '/admin/verify');
+    const html = await (await fetch(`${base}/admin/verify`, { headers: { cookie } })).text();
+    const csrf = html.match(/name="_csrf" value="([^"]+)"/)[1];
+    const res = await fetch(`${base}/admin/verify`, {
+      method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie },
+      body: new URLSearchParams({ _csrf: csrf, code }),
+    });
+    return { res, cookie: res.status === 302 ? cookieOf(res) : cookie };
+  };
+
+  assert.equal((await attempt('000000')).res.status, 401);
+  // The code used during setup cannot be replayed.
+  const used = lastSteps.get(`${base}:owner`);
+  assert.equal((await attempt(totp.codeForStep(secret, used))).res.status, 401);
+  const next = await attempt(totp.codeForStep(secret, used + 1));
+  assert.equal(next.res.status, 302);
+  assert.equal((await fetch(`${base}/admin`, { headers: { cookie: next.cookie } })).status, 200);
+
+  const viaRecovery = await attempt(codes[0].toLowerCase());
+  assert.equal(viaRecovery.res.status, 302);
+  assert.equal((await fetch(`${base}/admin`, { headers: { cookie: viaRecovery.cookie } })).status, 200);
+  assert.equal((await attempt(codes[0])).res.status, 401);
+});
+
+test('owner adds, resets and removes admins; admins have their own passwords', async (t) => {
+  const { base, close } = await boot();
+  t.after(close);
+  const owner = await signIn(base);
+  const ownerCsrf = await csrfToken(base, owner.cookie);
+  const post = (path, cookie, csrf, fields = {}) => fetch(`${base}${path}`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie },
+    body: new URLSearchParams({ _csrf: csrf, ...fields }),
+  });
+
+  assert.equal((await post('/admin/admins', owner.cookie, ownerCsrf, { name: '  ' })).status, 400);
+  const added = await post('/admin/admins', owner.cookie, ownerCsrf, { name: 'Grace <b>' });
+  assert.equal(added.status, 200);
+  const addedHtml = await added.text();
+  assert.match(addedHtml, /Grace &lt;b&gt;/);
+  const temp = addedHtml.match(/<code>([A-Z0-9]{4}(?:-[A-Z0-9]{4}){3})<\/code>/)[1];
+
+  const newPassword = 'grace has her own long password';
+  const grace = await signIn(base, { password: temp, newPassword, name: 'grace' });
+  assert.equal(grace.codes.length, 8);
+  const graceAdmin = await (await fetch(`${base}/admin`, { headers: { cookie: grace.cookie } })).text();
+  assert.doesNotMatch(graceAdmin, /Add an admin/);
+  const graceCsrf = graceAdmin.match(/name="_csrf" value="([^"]+)"/)[1];
+  assert.equal((await post('/admin/admins', grace.cookie, graceCsrf, { name: 'Eve' })).status, 403);
+
+  // The temporary code stops working; her own password works.
+  const old = await fetch(`${base}/admin/login`, {
+    method: 'POST', redirect: 'manual', headers: FORM(base), body: new URLSearchParams({ password: temp }),
+  });
+  assert.equal(old.status, 401);
+  const again = await signIn(base, { password: newPassword, name: 'grace' });
+  assert.ok(again.cookie);
+
+  const list = await (await fetch(`${base}/admin`, { headers: { cookie: owner.cookie } })).text();
+  assert.match(list, /Grace &lt;b&gt;/);
+  const id = list.match(/\/admin\/admins\/([0-9a-f-]{36})\/remove/)[1];
+
+  const reset = await post(`/admin/admins/${id}/reset`, owner.cookie, ownerCsrf);
+  assert.equal(reset.status, 200);
+  assert.equal((await fetch(`${base}/admin`, { headers: { cookie: grace.cookie }, redirect: 'manual' })).status, 302);
+  assert.equal((await fetch(`${base}/admin/login`, {
+    method: 'POST', redirect: 'manual', headers: FORM(base), body: new URLSearchParams({ password: newPassword }),
+  })).status, 401);
+
+  const removed = await post(`/admin/admins/${id}/remove`, owner.cookie, ownerCsrf);
+  assert.equal(removed.status, 302);
+  const after = await (await fetch(`${base}/admin`, { headers: { cookie: owner.cookie } })).text();
+  assert.doesNotMatch(after, /Grace/);
+  assert.equal((await post('/admin/admins/owner/remove', owner.cookie, ownerCsrf)).status, 302);
+  assert.match(await (await fetch(`${base}/admin`, { headers: { cookie: owner.cookie } })).text(), /Owner/);
+});
+
+test('an admin cannot reuse another admin\'s password', async (t) => {
+  const { base, close } = await boot();
+  t.after(close);
+  const owner = await signIn(base);
+  const csrf = await csrfToken(base, owner.cookie);
+  const added = await (await fetch(`${base}/admin/admins`, {
+    method: 'POST', headers: { ...FORM(base), cookie: owner.cookie }, body: new URLSearchParams({ _csrf: csrf, name: 'Sam' }),
+  })).text();
+  const temp = added.match(/<code>([A-Z0-9]{4}(?:-[A-Z0-9]{4}){3})<\/code>/)[1];
+  const first = await fetch(`${base}/admin/login`, {
+    method: 'POST', redirect: 'manual', headers: FORM(base), body: new URLSearchParams({ password: temp }),
+  });
+  const cookie = cookieOf(first);
+  const html = await (await fetch(`${base}/admin/setup`, { headers: { cookie } })).text();
+  const res = await fetch(`${base}/admin/setup`, {
+    method: 'POST', headers: { ...FORM(base), cookie },
+    body: new URLSearchParams({
+      _csrf: html.match(/name="_csrf" value="([^"]+)"/)[1], code: currentCode(base32FromSetup(html)),
+      newPassword: PASSWORD, confirmPassword: PASSWORD,
+    }),
+  });
+  assert.equal(res.status, 400);
+  assert.match(await res.text(), /choose a different password/);
 });

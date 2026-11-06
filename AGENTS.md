@@ -8,7 +8,8 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 
 - `server.js` — `createApp()` factory and routes (public pages, admin login, uploads, deletes).
 - `lib/render.js` — all HTML templates. Always escape user content with `esc()`.
-- `lib/auth.js` — admin password validation, revocable HttpOnly session cookie, CSRF tokens, and bounded login throttling.
+- `lib/auth.js` — admin password validation, revocable HttpOnly session cookie (pending vs. full stages), CSRF tokens, and bounded login throttling.
+- `lib/admins.js`, `lib/admin-routes.js`, `lib/totp.js` — two-step admin sign-in (password then TOTP/recovery code, no usernames), per-admin passwords and owner-managed admins; `scripts/reset-owner-2fa.js` clears the owner's authenticator.
 - `lib/store.js` — JSON-file store in `data/` (git-ignored). Uploaded files live in `uploads/` (git-ignored).
 - `public/styles.css` — the single stylesheet and all design tokens.
 - `tests/` — `node --test` end-to-end tests.
@@ -25,7 +26,7 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 - `/sermons` — public audio list and individual sermon pages.
 - `/contact` — public contact page with the church address, Google Maps link, service and visitor information, and Instagram page. 1 Corinthians 13:12 appears beside the church logo at the bottom. Linked from the Connect card on `/`.
 - `/font-study.html` — standalone English and Korean typeface specimen.
-- `/admin` — sign-in required; upload/delete sermon audio.
+- `/admin` — two-step sign-in required (`/admin/login` → `/admin/verify` or first-time `/admin/setup`); upload/delete sermon audio; the owner (holder of `ADMIN_PASSWORD`) manages other admins.
 
 ## Running locally
 

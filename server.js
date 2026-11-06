@@ -6,6 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as auth from './lib/auth.js';
 import { createStore } from './lib/store.js';
+import { createAdmins } from './lib/admins.js';
+import { mountAdminAuth } from './lib/admin-routes.js';
 import * as view from './lib/render.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -50,6 +52,7 @@ export function createApp({
   const audioDir = path.join(uploadDir, 'audio');
   const pub = path.join(root, 'public');
   const loginLimiter = auth.createLoginLimiter();
+  const admins = createAdmins(store, password);
 
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
@@ -119,23 +122,6 @@ export function createApp({
     page(req, res, { title: 'Admin sign in', active: 'admin', body: view.loginPage({}) });
   });
 
-  app.post('/admin/login', auth.requireSameOrigin, (req, res) => {
-    const ip = req.ip;
-    const retryAfter = loginLimiter.retryAfter(ip);
-    if (retryAfter) {
-      res.set({ 'Cache-Control': 'no-store', 'Retry-After': String(retryAfter) });
-      return res.status(429).send(view.layout({ title: 'Admin sign in', body: view.loginPage({ error: 'Too many attempts. Please wait a few minutes.' }) }));
-    }
-    if (!auth.checkPassword(req.body.password, password)) {
-      loginLimiter.recordFailure(ip);
-      res.set('Cache-Control', 'no-store');
-      return res.status(401).send(view.layout({ title: 'Admin sign in', body: view.loginPage({ error: 'That password was not correct.' }) }));
-    }
-    loginLimiter.clear(ip);
-    auth.issueSession(res);
-    res.redirect('/admin');
-  });
-
   app.post('/admin/logout', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, (req, res) => {
     auth.clearSession(req, res);
     res.redirect('/');
@@ -143,12 +129,15 @@ export function createApp({
 
   const adminView = async (req, res, status = 200, extra = {}) => {
     const sermons = await store.read('sermons');
+    if (auth.isOwner(req)) extra = { ...extra, admins: await admins.list() };
     res.set('Cache-Control', 'no-store');
     res.status(status).send(view.layout({
       title: 'Admin', active: 'admin', admin: true,
       body: view.adminPage({ sermons, csrfToken: auth.csrfToken(req), ...extra }),
     }));
   };
+
+  mountAdminAuth({ app, admins, loginLimiter, adminView, ownerPassword: password });
 
   app.get('/admin', auth.requireAdmin, (req, res) => adminView(req, res, 200, { notice: req.query.notice }));
 
