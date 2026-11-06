@@ -173,6 +173,7 @@ test('contact visit panel includes an accessible location diagram with south-sid
   const html = await response.text();
   const panel = html.match(/<section class="panel visit-panel">([\s\S]*?)<\/section>/)?.[1];
   assert.ok(panel, 'The diagram belongs in the Visit us panel');
+  assert.match(panel, /<div class="map-viewport" tabindex="0" role="region" aria-label="Location diagram · 위치 안내도">/);
   assert.match(panel, /<svg viewBox="0 0 760 440" role="img" aria-labelledby="visit-map-title visit-map-desc">/);
   assert.match(panel, /<title id="visit-map-title">Church location and parking · 교회 위치와 주차장<\/title>/);
   assert.match(panel, /<desc id="visit-map-desc">North is up\.[\s\S]*주차장은 건물 남쪽 바로 뒤편에/);
@@ -186,6 +187,7 @@ test('contact visit panel includes an accessible location diagram with south-sid
   assert.equal(parking[3], building[3]);
   assert.ok(Number(parking[2]) > Number(building[2]) + Number(building[4]), 'Parking is south of the building on the north-up diagram');
   assert.match(panel, /Not to scale[\s\S]*실제 축척과 다릅니다/);
+  assert.match(panel, /Scroll sideways to explore the map\.[\s\S]*지도를 좌우로 움직여 살펴보세요\./);
   assert.match(panel, /The parking lot is directly behind the south side of the building\./);
   assert.match(panel, /주차장은 건물 남쪽 바로 뒤편에 있습니다\./);
   assert.match(html, /Free parking is available directly behind the south side of the building\./);

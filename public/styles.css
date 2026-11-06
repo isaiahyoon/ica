@@ -227,17 +227,18 @@ nav a:focus-visible { box-shadow: inset 0 0 0 2px var(--brass-soft); }
 .contact-grid > .panel li { padding-left: .2em; }
 .contact-grid > .panel li + li { margin-top: .45rem; }
 .contact-grid .bilingual { gap: .25em; line-height: 1.45; }
-.contact-grid .contact-address { margin: 0 0 1rem; font-size: clamp(1.1rem, 2vw, 1.25rem); line-height: 1.5; }
+.contact-grid .contact-address { margin: 0 0 1rem; font-size: clamp(1.1rem, 2vw, 1.25rem); font-style: normal; line-height: 1.5; }
 .contact-grid .contact-address a { display: inline-block; }
 .contact-grid > .panel:last-child { grid-column: 1 / -1; }
-.contact-grid > .visit-panel { grid-column: 1 / -1; }
+.contact-grid > .visit-panel { grid-column: 1 / -1; min-width: 0; }
 .contact-grid > .visit-panel ~ .panel { grid-column: auto; }
 .visit-map {
   --plate: var(--silver); --rim: 2px;
   --fill: linear-gradient(145deg, var(--paper), var(--canvas), var(--sky));
   margin: 1.25rem auto 0; padding: clamp(.5rem, 2vw, 1rem); max-width: 48rem;
 }
-.visit-map svg { display: block; width: 100%; height: auto; overflow: visible; }
+.map-viewport { overflow-x: auto; }
+.visit-map svg { display: block; width: 100%; min-width: 36rem; height: auto; }
 .visit-map text { font: 400 18px var(--sans); fill: var(--navy); }
 .visit-map [lang="ko"] { font-family: var(--sans-ko); font-size: 16px; }
 .visit-map .map-roads { fill: none; stroke: var(--paper); stroke-width: 16px; }
@@ -250,6 +251,7 @@ nav a:focus-visible { box-shadow: inset 0 0 0 2px var(--brass-soft); }
 .visit-map .map-freeway { fill: var(--navy); stroke: var(--brass-soft); stroke-width: 2px; }
 .visit-map .map-freeway-label { fill: var(--paper); font-size: 17px; }
 .visit-map figcaption { margin-top: .75rem; text-align: center; font-size: .85rem; color: var(--muted); }
+.map-scroll-hint { display: none; margin-top: .65rem; }
 .contact-grid > .panel .visit-parking-note { margin-top: 1rem; color: var(--navy); }
 .about-page .people { list-style: none; margin: .25rem 0 1rem; padding: 0; }
 .about-page .people li { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .2rem 1.5rem; padding: .55rem 0; border-bottom: 1px solid var(--line); }
@@ -260,6 +262,7 @@ nav a:focus-visible { box-shadow: inset 0 0 0 2px var(--brass-soft); }
 @media (max-width: 680px) {
   .contact-grid { grid-template-columns: 1fr; }
   .contact-grid > .panel:last-child { grid-column: auto; }
+  .map-scroll-hint { display: block; }
 }
 
 .page-head {
