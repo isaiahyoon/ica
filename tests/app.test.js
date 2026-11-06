@@ -138,7 +138,7 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(contactHtml, /The Glass of the Word<\/span>[\s\S]*<img src="\/favicon\.png"[\s\S]*말씀의 거울/);
   assert.match(contactHtml, /For now we see through a glass, darkly;.*1 Corinthians 13:12/s);
   assert.match(contactHtml, /고린도전서 13:12/);
-  assert.match(contactHtml, /href="https:\/\/www\.google\.com\/maps\/place\/Immanuel\+Church\+of\+America\+%2F\+%EB%AF%B8%EC%A3%BC%EC%9E%84%EB%A7%88%EB%88%84%EC%97%98%EA%B5%90%ED%9A%8C\/@34\.0397122,-118\.3242422,17z\/data=!3m1!4b1!4m6!3m5!1s0x80c2b867941260c9:0xc64dfc88582a36a6!8m2!3d34\.0397078!4d-118\.3216673!16s%2Fg%2F1262s7wvv\?entry=ttu&amp;g_ep=EgoyMDI2MTEwMi4wIKXMDSoASAFQAw%3D%3D" target="_blank" rel="noopener noreferrer">[\s\S]*3406 W Washington Blvd 2F<br>Los Angeles, CA 90019/);
+  assert.match(contactHtml, /href="https:\/\/www\.google\.com\/maps\/place\/Immanuel\+Church\+of\+America\+%2F\+%EB%AF%B8%EC%A3%BC%EC%9E%84%EB%A7%88%EB%88%84%EC%97%98%EA%B5%90%ED%9A%8C\/@34\.0397122,-118\.3242422,17z\/data=!3m1!4b1!4m6!3m5!1s0x80c2b867941260c9:0xc64dfc88582a36a6!8m2!3d34\.0397078!4d-118\.3216673!16s%2Fg%2F1262s7wvv\?entry=ttu&amp;g_ep=EgoyMDI2MTEwMi4wIKXMDSoASAFQAw%3D%3D" target="_blank" rel="noopener noreferrer">[\s\S]*3406 W Washington Blvd 2F<br>Los Angeles, CA 90018/);
   assert.match(contactHtml, /href="https:\/\/www\.instagram\.com\/immanuelchurchofamerica\/" target="_blank" rel="noopener noreferrer">@immanuelchurchofamerica/);
   for (const detail of [
     'Sunday: 9:00 am, 11:00 am, and 2:00 pm',
