@@ -22,9 +22,9 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 ## Pages
 
 - `/` — Information page (the landing page). Never invent service times, addresses, or doctrine.
-- `/about` — public About page: family church, worship style, preaching, creed and Lord's Prayer, and leadership (senior pastor and elders with phone links). Content comes from the owner; never invent details.
+- `/about` — public About page: family church, worship services and times, worship style, preaching, creed and Lord's Prayer, and leadership (senior pastor and elders with phone links). Content comes from the owner; never invent details.
 - `/sermons` — public audio list and individual sermon pages.
-- `/contact` — public contact page with the church address, Google Maps link, bilingual SVG location diagram (parking directly behind the building's south side), service and visitor information, and Instagram page. 1 Corinthians 13:12 appears beside the church logo at the bottom. Linked from the Connect card on `/`.
+- `/contact` — public contact page with the church address, Google Maps link, bilingual SVG location diagram (parking directly behind the building's south side), visitor information, and Instagram page, with a link to worship times on About. 1 Corinthians 13:12 appears beside the church logo at the bottom. Linked from the Connect card on `/`.
 - `/font-study.html` — standalone English and Korean typeface specimen.
 - `/admin` — two-step sign-in required (`/admin/login` → `/admin/verify` or first-time `/admin/setup`); upload/delete sermon audio; the owner (holder of `ADMIN_PASSWORD`) manages other admins.
 

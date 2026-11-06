@@ -145,20 +145,34 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(contactHtml, /고린도전서 13:12/);
   assert.match(contactHtml, /href="https:\/\/www\.google\.com\/maps\/place\/Immanuel\+Church\+of\+America\+%2F\+%EB%AF%B8%EC%A3%BC%EC%9E%84%EB%A7%88%EB%88%84%EC%97%98%EA%B5%90%ED%9A%8C\/@34\.0397122,-118\.3242422,17z\/data=!3m1!4b1!4m6!3m5!1s0x80c2b867941260c9:0xc64dfc88582a36a6!8m2!3d34\.0397078!4d-118\.3216673!16s%2Fg%2F1262s7wvv\?entry=ttu&amp;g_ep=EgoyMDI2MTEwMi4wIKXMDSoASAFQAw%3D%3D" target="_blank" rel="noopener noreferrer">[\s\S]*3406 W Washington Blvd 2F<br>Los Angeles, CA 90018/);
   assert.match(contactHtml, /href="https:\/\/www\.instagram\.com\/immanuelchurchofamerica\/" target="_blank" rel="noopener noreferrer">@immanuelchurchofamerica/);
-  for (const detail of [
+  const serviceDetails = [
     'Sunday: 9:00 am, 11:00 am, and 2:00 pm',
     'Wednesday: 7:30 pm',
     'Friday: 7:30 pm',
     'Lunch is provided after the 11:00 am Sunday service.',
     'English interpretation is available on request.',
-    'Free parking is available',
-    'Our church is ADA accessible, with an elevator available to take you to the second floor.',
-    '엘리베이터로 2층까지 이동하실 수 있습니다.',
-    'All are welcome.',
     '주일: 오전 9시, 오전 11시, 오후 2시',
     '수요일: 오후 7시 30분',
     '금요일: 오후 7시 30분',
+  ];
+  for (const detail of serviceDetails) {
+    assert.ok(aboutHtml.includes(detail), `About page should include "${detail}"`);
+    assert.ok(!contactHtml.includes(detail), `Contact page should not duplicate "${detail}"`);
+  }
+  assert.match(contactHtml, /<a class="btn btn-primary" href="\/about#services">/);
+  assert.match(aboutHtml, /<section class="panel" id="services">/);
+  for (const detail of [
+    'Our church is ADA accessible, with an elevator available to take you to the second floor.',
+    '엘리베이터로 2층까지 이동하실 수 있습니다.',
+    'All are welcome.',
   ]) assert.ok(contactHtml.includes(detail), `Contact page should include "${detail}"`);
+  const headings = (html) => [...html.matchAll(/<h2><span class="bilingual"><span lang="en">([^<]+)<\/span>/g)].map((match) => match[1]);
+  assert.deepEqual(headings(aboutHtml), ['A family church', 'Service Times', 'Worship', 'Preaching', 'What we affirm', 'Leadership']);
+  assert.deepEqual(headings(contactHtml), ['Visit us', 'A few helpful details', 'Stay connected']);
+  const contactPanel = contactHtml.match(/<div class="panel visit-panel">([\s\S]*?)<\/div>\s*<\/div>\s*<section class="contact-scripture/);
+  assert.ok(contactPanel, 'All contact information is in one panel, separate from the Scripture');
+  assert.equal((contactPanel[1].match(/class="contact-section(?: contact-map)?"/g) || []).length, 4);
+  assert.match(contactPanel[1], /Visit us[\s\S]*href="\/about#services"[\s\S]*class="contact-section contact-map"[\s\S]*class="visit-map"[\s\S]*visit-parking-note[\s\S]*A few helpful details[\s\S]*Stay connected/);
   const loginPage = await (await fetch(`${base}/admin/login`)).text();
   assert.match(loginPage, /<form method="post" action="\/admin\/login"/);
   assert.doesNotMatch(loginPage, /href="\/admin(?:\/login)?"/);
@@ -171,9 +185,8 @@ test('contact visit panel includes an accessible location diagram with south-sid
   const response = await fetch(`${base}/contact`);
   assert.equal(response.status, 200);
   const html = await response.text();
-  const panel = html.match(/<section class="panel visit-panel">([\s\S]*?)<\/section>/)?.[1];
-  assert.ok(panel, 'The diagram belongs in the Visit us panel');
-  assert.match(panel, /<div class="map-viewport" tabindex="0" role="region" aria-label="Location diagram · 위치 안내도">/);
+  const panel = html.match(/<div class="contact-section contact-map">([\s\S]*?)<\/div>/)?.[1];
+  assert.ok(panel, 'The diagram and parking note belong together');
   assert.match(panel, /<svg viewBox="0 0 760 440" role="img" aria-labelledby="visit-map-title visit-map-desc">/);
   assert.match(panel, /<title id="visit-map-title">Church location and parking · 교회 위치와 주차장<\/title>/);
   assert.match(panel, /<desc id="visit-map-desc">North is up\.[\s\S]*주차장은 건물 남쪽 바로 뒤편에/);
@@ -186,11 +199,22 @@ test('contact visit panel includes an accessible location diagram with south-sid
   assert.equal(parking[1], building[1], 'Parking is aligned directly behind the building');
   assert.equal(parking[3], building[3]);
   assert.ok(Number(parking[2]) > Number(building[2]) + Number(building[4]), 'Parking is south of the building on the north-up diagram');
-  assert.match(panel, /Not to scale[\s\S]*실제 축척과 다릅니다/);
-  assert.match(panel, /Scroll sideways to explore the map\.[\s\S]*지도를 좌우로 움직여 살펴보세요\./);
+  assert.doesNotMatch(panel, /<figcaption|Location guide|오시는 길 안내|Not to scale|실제 축척과 다릅니다/);
+  assert.doesNotMatch(panel, /map-viewport|Scroll sideways/);
   assert.match(panel, /The parking lot is directly behind the south side of the building\./);
   assert.match(panel, /주차장은 건물 남쪽 바로 뒤편에 있습니다\./);
-  assert.match(html, /Free parking is available directly behind the south side of the building\./);
+  const helpfulDetails = html.match(/<h2><span class="bilingual"><span lang="en">A few helpful details<\/span>[\s\S]*?<\/section>/)?.[0];
+  assert.ok(helpfulDetails);
+  assert.doesNotMatch(helpfulDetails, /parking|주차장/i);
+  const css = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  assert.match(css, /\.visit-map\s*\{[^}]*max-width:\s*32rem/s);
+  assert.match(css, /\.visit-map svg\s*\{[^}]*width:\s*100%;[^}]*height:\s*auto;/s);
+  assert.doesNotMatch(css, /\.visit-map svg\s*\{[^}]*min-width:/s);
+  assert.match(css, /\.contact-grid > \.panel p\.visit-parking-note\s*\{[^}]*margin-top:\s*1\.25rem/s);
+  assert.match(css, /\.contact-grid > \.visit-panel\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
+  assert.match(css, /@media \(max-width: 680px\)\s*\{[\s\S]*?\.contact-grid > \.visit-panel\s*\{[^}]*grid-template-columns:\s*1fr/s);
+  assert.match(css, /@media \(max-width: 680px\)\s*\{[\s\S]*?\.visit-panel \.contact-section\s*\{[^}]*text-align:\s*center/s);
+  assert.match(css, /@media \(max-width: 680px\)\s*\{[\s\S]*?\.contact-scripture\s*\{[^}]*flex-direction:\s*column;[^}]*text-align:\s*center/s);
 });
 
 test('configured storage paths serve persistent sermon data and uploads', async (t) => {
