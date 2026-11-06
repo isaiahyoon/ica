@@ -130,7 +130,7 @@ test('public pages render, landing is the information page', async (t) => {
     'We are a family church.', 'Our preaching is biblically sound.',
     'late 19th and 20th centuries', 'We affirm the Apostles’ Creed and the Lord’s Prayer.',
     'John Yoon', '(윤태선)', 'href="tel:+13237312323"',
-    'Joshua Won', '(원여호수아)', 'href="tel:+12132105582"',
+    'Joshua Won', '(원 여호수아)', 'href="tel:+12132105582"',
     'Kyu Ho Yeo', '(여규호)', 'href="tel:+12135037883"',
     'Hyi Shik Lee', '(이희식)', 'href="tel:+12132486700"',
   ]) assert.ok(aboutHtml.includes(detail), `About page should include "${detail}"`);
@@ -163,6 +163,32 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(loginPage, /<form method="post" action="\/admin\/login"/);
   assert.doesNotMatch(loginPage, /href="\/admin(?:\/login)?"/);
   assert.equal((await fetch(base + '/nope')).status, 404);
+});
+
+test('contact visit panel includes an accessible location diagram with south-side parking', async (t) => {
+  const { base, close } = await boot();
+  t.after(close);
+  const response = await fetch(`${base}/contact`);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  const panel = html.match(/<section class="panel visit-panel">([\s\S]*?)<\/section>/)?.[1];
+  assert.ok(panel, 'The diagram belongs in the Visit us panel');
+  assert.match(panel, /<svg viewBox="0 0 760 440" role="img" aria-labelledby="visit-map-title visit-map-desc">/);
+  assert.match(panel, /<title id="visit-map-title">Church location and parking · 교회 위치와 주차장<\/title>/);
+  assert.match(panel, /<desc id="visit-map-desc">North is up\.[\s\S]*주차장은 건물 남쪽 바로 뒤편에/);
+  for (const label of ['Crenshaw Blvd.', 'Washington Blvd.', '4th Avenue', 'Arlington', 'I-10', 'I-405', 'I-110', '미주임마누엘교회', 'Parking · South side', '주차장 · 건물 남쪽']) {
+    assert.ok(panel.includes(label), `The diagram should include ${label}`);
+  }
+  const building = panel.match(/<rect class="map-building" x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"/);
+  const parking = panel.match(/<rect class="map-parking" x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"/);
+  assert.ok(building && parking, 'The building and parking lot are both drawn');
+  assert.equal(parking[1], building[1], 'Parking is aligned directly behind the building');
+  assert.equal(parking[3], building[3]);
+  assert.ok(Number(parking[2]) > Number(building[2]) + Number(building[4]), 'Parking is south of the building on the north-up diagram');
+  assert.match(panel, /Not to scale[\s\S]*실제 축척과 다릅니다/);
+  assert.match(panel, /The parking lot is directly behind the south side of the building\./);
+  assert.match(panel, /주차장은 건물 남쪽 바로 뒤편에 있습니다\./);
+  assert.match(html, /Free parking is available directly behind the south side of the building\./);
 });
 
 test('configured storage paths serve persistent sermon data and uploads', async (t) => {
