@@ -8,7 +8,7 @@ Church website prototype.
 
 - **Information page** (landing page, `/`) — welcome and overview; About details to come.
 - **About** (`/about`) — bilingual page on our family church, worship style, preaching, what we affirm, and leadership with contact numbers.
-- **Sermons** (`/sermons`) — public audio player list.
+- **Sermons** (`/sermons`) — public audio player list with native sharing where supported and a copy-link fallback.
 - **Gallery** (`/gallery`) — public photo gallery.
 - **Contact** (`/contact`) — address with a Google Maps link, worship times, visitor details, and Instagram; includes 1 Corinthians 13:12 beside the church logo and is linked from the Connect card on the welcome page.
 - **Admin** (`/admin`) — password-protected upload and removal of sermon audio and photos.
@@ -32,6 +32,14 @@ Other commands: `npm run dev` (auto-restart), `npm test`. Set `PORT` to change t
 The configured admin password must contain at least 16 non-whitespace characters. Use a unique passphrase and keep it in your deployment's secret manager. Production requires `NODE_ENV=production` and an `ADMIN_SESSION_SECRET` of at least 32 bytes; use the same secret across restarts. Production cookies are `Secure`, `HttpOnly`, `SameSite=Strict`, and host-only. Serve the site over HTTPS in production.
 
 Login attempts are limited to 8 failures per client IP in 15 minutes. Login and admin changes require same-origin requests; state-changing admin forms also use session-bound CSRF tokens. Admin sessions expire after 8 hours and are revoked on sign-out or server restart. The session and rate-limit stores are in-memory and intended for a single server process. Before running multiple instances, replace them with a shared session store and shared rate limiter. If running behind a reverse proxy, set `TRUST_PROXY_HOPS` to the exact number of trusted proxy hops so rate limits use the client IP; do not trust arbitrary forwarded headers.
+
+## Deploy on Render
+
+The [Render Blueprint](render.yaml) creates a Node web service with a 1 GB persistent disk mounted at `/var/data`. Sermon/photo metadata and uploaded files are stored there so they survive deploys and restarts. The service uses one instance because admin sessions and login rate limits are held in memory.
+
+Create a Blueprint in Render from this repository and provide a unique `ADMIN_PASSWORD` of at least 16 non-whitespace characters when prompted. Render generates `ADMIN_SESSION_SECRET`; keep it stable across restarts. After the first deploy, add `immanuelchurchofamerica.org` in the service's **Settings → Custom Domains**, register the domain with a registrar if it is available, then set the DNS records Render displays and verify the domain. Render provisions HTTPS after DNS verification.
+
+The app also supports `ICA_DATA_DIR` and `ICA_UPLOAD_DIR` for persistent storage on other hosts. Both directories should be on persistent storage, not an ephemeral deploy filesystem.
 
 ## Data
 

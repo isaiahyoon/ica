@@ -31,6 +31,10 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 
 `npm start` (http://localhost:8100). Set `ADMIN_PASSWORD`; otherwise a freshly generated password is printed at startup.
 
+## Deployment
+
+`render.yaml` configures a single Render Node web service and persistent disk. Set `ICA_DATA_DIR` and `ICA_UPLOAD_DIR` to directories on persistent storage when using another host. Keep one app instance unless sessions and login throttling are moved to shared storage.
+
 ## Upload & security rules
 
 - Admin-only routes must use `auth.requireAdmin`; state-changing admin routes must also enforce same-origin and CSRF checks.

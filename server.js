@@ -32,7 +32,11 @@ function uploader(dir, { exts, max }, mimePrefix, files) {
 const clean = (s, n) => String(s ?? '').trim().slice(0, n);
 const removeFiles = (dir, names) => Promise.all(names.map((n) => fs.rm(path.join(dir, n), { force: true })));
 
-export function createApp({ dataDir = path.join(root, 'data'), uploadDir = path.join(root, 'uploads'), password }) {
+export function createApp({
+  dataDir = process.env.ICA_DATA_DIR || path.join(root, 'data'),
+  uploadDir = process.env.ICA_UPLOAD_DIR || path.join(root, 'uploads'),
+  password,
+}) {
   auth.assertAdminPassword(password);
   const app = express();
   const proxyHops = process.env.TRUST_PROXY_HOPS;
@@ -258,10 +262,13 @@ export function createApp({ dataDir = path.join(root, 'data'), uploadDir = path.
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { password, generated } = auth.resolveAdminPassword();
-  await fs.mkdir(path.join(root, 'uploads/audio'), { recursive: true });
-  await fs.mkdir(path.join(root, 'uploads/photos'), { recursive: true });
+  const dataDir = process.env.ICA_DATA_DIR || path.join(root, 'data');
+  const uploadDir = process.env.ICA_UPLOAD_DIR || path.join(root, 'uploads');
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.mkdir(path.join(uploadDir, 'audio'), { recursive: true });
+  await fs.mkdir(path.join(uploadDir, 'photos'), { recursive: true });
   const port = Number(process.env.PORT) || 8100;
-  createApp({ password }).listen(port, () => {
+  createApp({ dataDir, uploadDir, password }).listen(port, () => {
     console.log(`ICA running at http://localhost:${port}`);
     if (generated) console.log(`Admin password (this run only; set ADMIN_PASSWORD to choose your own): ${password}`);
   });

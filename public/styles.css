@@ -287,7 +287,9 @@ a.page-num:hover, a.page-step:hover { background: var(--navy); color: #fff; bord
 .sermon .meta { margin: 0; font: 400 .8rem var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--brass); }
 .sermon .scripture { display: inline-block; padding: .15rem .8rem; margin: 0 0 .75rem; font-style: italic; border-left: 2px solid var(--brass-soft); }
 .sermon audio { margin-top: .75rem; border-radius: 2rem; }
-.share-link { display: inline-block; margin-top: .6rem; font: 400 .85rem var(--sans); letter-spacing: .04em; }
+.sermon-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
+.sermon-action { font-size: .85rem; letter-spacing: .04em; }
+.sermon-action .bilingual { flex-direction: row; flex-wrap: wrap; gap: .25em .6em; align-items: baseline; }
 .meta { margin: 0 0 .5rem; color: var(--muted); font-size: .95rem; }
 .scripture { font: 1.05rem var(--serif); color: var(--deep-teal); margin: 0 0 .5rem; }
 audio { width: 100%; margin-top: .5rem; }

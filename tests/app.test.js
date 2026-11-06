@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { runInNewContext } from 'node:vm';
 import { createApp } from '../server.js';
 
 const PASSWORD = 'correct horse battery staple';
@@ -105,6 +106,125 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(loginPage, /<form method="post" action="\/admin\/login"/);
   assert.doesNotMatch(loginPage, /href="\/admin(?:\/login)?"/);
   assert.equal((await fetch(base + '/nope')).status, 404);
+});
+
+test('configured storage paths serve persistent sermon data and uploads', async (t) => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ica-storage-'));
+  const dataDir = path.join(tmp, 'data');
+  const uploadDir = path.join(tmp, 'uploads');
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.mkdir(path.join(uploadDir, 'photos'), { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'sermons.json'), JSON.stringify([{
+    id: 'persisted-sermon', title: 'Persisted sermon', speaker: '', date: '',
+    scripture: '', description: '', file: 'sermon.mp3', createdAt: new Date().toISOString(),
+  }]));
+  await fs.writeFile(path.join(uploadDir, 'photos', 'persisted.png'), 'photo');
+
+  const previousDataDir = process.env.ICA_DATA_DIR;
+  const previousUploadDir = process.env.ICA_UPLOAD_DIR;
+  process.env.ICA_DATA_DIR = dataDir;
+  process.env.ICA_UPLOAD_DIR = uploadDir;
+  let app;
+  try {
+    app = createApp({ password: PASSWORD });
+  } finally {
+    if (previousDataDir === undefined) delete process.env.ICA_DATA_DIR;
+    else process.env.ICA_DATA_DIR = previousDataDir;
+    if (previousUploadDir === undefined) delete process.env.ICA_UPLOAD_DIR;
+    else process.env.ICA_UPLOAD_DIR = previousUploadDir;
+  }
+
+  const server = app.listen(0);
+  const base = `http://localhost:${server.address().port}`;
+  t.after(async () => {
+    const closed = new Promise((resolve) => server.close(resolve));
+    server.closeAllConnections();
+    await closed;
+    await fs.rm(tmp, { recursive: true, force: true });
+  });
+
+  const sermons = await (await fetch(`${base}/sermons`)).text();
+  assert.match(sermons, /Persisted sermon/);
+  const photo = await fetch(`${base}/uploads/photos/persisted.png`);
+  assert.equal(photo.status, 200);
+  assert.equal(await photo.text(), 'photo');
+});
+
+test('sermons can be shared with the native share sheet or copied as a link', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'sermons.json'), JSON.stringify([{
+    id: 'share-id', title: 'A sermon', speaker: '', date: '', scripture: '',
+    description: '', file: 'sermon.mp3', createdAt: new Date().toISOString(),
+  }]));
+  const html = await (await fetch(`${base}/sermons`)).text();
+  assert.match(html, /data-share-title="A sermon"/);
+  assert.match(html, /class="btn btn-ghost sermon-action share-link"[\s\S]*Share sermon[\s\S]*설교 공유/);
+  assert.match(html, /class="btn btn-ghost sermon-action copy-link"[\s\S]*Copy link[\s\S]*링크 복사/);
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(script);
+
+  const createHandler = (navigator) => {
+    let handler;
+    const location = { origin: base, href: '' };
+    runInNewContext(script, {
+      document: { addEventListener: (_type, callback) => { handler = callback; } },
+      navigator, location, URL, setTimeout: () => 0,
+    });
+    const links = {
+      share: {
+        dataset: { shareTitle: 'A sermon', copied: 'Link copied · 링크 복사됨' }, innerHTML: 'Share sermon', textContent: '',
+        getAttribute: () => '/sermons#sermon-share-id',
+      },
+      copy: {
+        dataset: { copied: 'Link copied · 링크 복사됨' }, innerHTML: 'Copy link', textContent: '',
+        getAttribute: () => '/sermons#sermon-share-id',
+      },
+    };
+    const eventFor = (action) => ({
+      target: { closest: (selector) => selector === `.${action}-link` ? links[action] : null },
+      prevented: false,
+      preventDefault() { this.prevented = true; },
+    });
+    return { handler, links, eventFor, location };
+  };
+
+  const shared = [];
+  const native = createHandler({ share: async (data) => shared.push(data) });
+  const shareEvent = native.eventFor('share');
+  await native.handler(shareEvent);
+  assert.equal(shareEvent.prevented, true);
+  assert.equal(shared.length, 1);
+  assert.equal(shared[0].title, 'A sermon');
+  assert.equal(shared[0].url, `${base}/sermons#sermon-share-id`);
+
+  let copied;
+  const shareFallback = createHandler({ clipboard: { writeText: async (url) => { copied = url; } } });
+  await shareFallback.handler(shareFallback.eventFor('share'));
+  assert.equal(copied, `${base}/sermons#sermon-share-id`);
+  assert.equal(shareFallback.links.share.textContent, 'Link copied · 링크 복사됨');
+
+  const fallback = createHandler({
+    share: async () => assert.fail('Copy link should not open the share sheet'),
+    clipboard: { writeText: async (url) => { copied = url; } },
+  });
+  const copyEvent = fallback.eventFor('copy');
+  await fallback.handler(copyEvent);
+  assert.equal(copyEvent.prevented, true);
+  assert.equal(copied, `${base}/sermons#sermon-share-id`);
+  assert.equal(fallback.links.copy.textContent, 'Link copied · 링크 복사됨');
+
+  const canceled = createHandler({
+    share: async () => { throw Object.assign(new Error('Canceled'), { name: 'AbortError' }); },
+    clipboard: { writeText: async () => assert.fail('Canceled sharing should not copy the link') },
+  });
+  await canceled.handler(canceled.eventFor('share'));
+  assert.equal(canceled.location.href, '');
+
+  const direct = createHandler({});
+  await direct.handler(direct.eventFor('copy'));
+  assert.equal(direct.location.href, `${base}/sermons#sermon-share-id`);
 });
 
 test('admin routes require sign in; missing and incorrect passwords are rejected', async (t) => {
