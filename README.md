@@ -7,10 +7,10 @@ Public website: [immanuelchurchofamerica.org](https://immanuelchurchofamerica.or
 ## Features
 
 - **Information page** (landing page, `/`) — welcome and overview; About details to come.
-- **About** (`/about`) — bilingual page on our family church, worship style, preaching, what we affirm, and leadership with contact numbers.
+- **About** (`/about`) — bilingual page on our family church, worship services and times, worship style, preaching, what we affirm, and leadership with contact numbers.
 - **Sermons** (`/sermons`, `/sermons/:id`) — public audio player list and individual sermon pages, with native sharing where supported and a copy-link option.
 - **Link previews** — absolute, bilingual Open Graph and Twitter Card metadata with a custom 1200×630 preview image; the canonical URL is set for each page.
-- **Contact** (`/contact`) — address with a Google Maps link, worship times, visitor details, and Instagram; includes 1 Corinthians 13:12 beside the church logo and is linked from the welcome page.
+- **Contact** (`/contact`) — address with a Google Maps link, a bilingual location diagram showing the parking lot directly behind the building's south side, visitor details, and Instagram, with a link to worship times on About; includes 1 Corinthians 13:12 beside the church logo and is linked from the welcome page.
 - **Admin** (`/admin`) — two-step sign-in (password, then authenticator code) for upload and removal of sermon audio; the owner can add, reset, and remove other admins.
 - **Font study** (`/font-study.html`) — English and Korean typeface specimens with a live four-font serif/sans pairing preview.
 
