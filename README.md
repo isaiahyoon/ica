@@ -2,14 +2,14 @@
 
 > “Immanuel, which being interpreted is, God with us.” — Matthew 1:23
 
-Church website prototype.
+Public website: [immanuelchurchofamerica.org](https://immanuelchurchofamerica.org).
 
 ## Features
 
 - **Information page** (landing page, `/`) — welcome and overview; About details to come.
 - **About** (`/about`) — bilingual page on our family church, worship style, preaching, what we affirm, and leadership with contact numbers.
 - **Sermons** (`/sermons`, `/sermons/:id`) — public audio player list and individual sermon pages, with native sharing where supported and a copy-link option.
-- **Link previews** — bilingual Open Graph and Twitter metadata with a custom 1200×630 preview image.
+- **Link previews** — absolute, bilingual Open Graph and Twitter Card metadata with a custom 1200×630 preview image; the canonical URL is set for each page.
 - **Contact** (`/contact`) — address with a Google Maps link, worship times, visitor details, and Instagram; includes 1 Corinthians 13:12 beside the church logo and is linked from the welcome page.
 - **Admin** (`/admin`) — two-step sign-in (password, then authenticator code) for upload and removal of sermon audio; the owner can add, reset, and remove other admins.
 - **Font study** (`/font-study.html`) — English and Korean typeface specimens with a live four-font serif/sans pairing preview.
@@ -47,7 +47,9 @@ Login attempts are limited to 8 failures per client IP in 15 minutes. Login and 
 
 The [Render Blueprint](render.yaml) creates a Node web service with a 1 GB persistent disk mounted at `/var/data`. Sermon metadata and uploaded audio files are stored there so they survive deploys and restarts. The service uses one instance because admin sessions and login rate limits are held in memory.
 
-Create a Blueprint in Render from this repository and provide a unique `ADMIN_PASSWORD` of at least 16 non-whitespace characters when prompted. Render generates `ADMIN_SESSION_SECRET`; keep it stable across restarts. After the first deploy, add `immanuelchurchofamerica.org` in the service's **Settings → Custom Domains**, register the domain with a registrar if it is available, then set the DNS records Render displays and verify the domain. Render provisions HTTPS after DNS verification.
+The live site is [immanuelchurchofamerica.org](https://immanuelchurchofamerica.org). The public pages publish absolute Open Graph image URLs and page-specific canonical URLs; the 1200×630 preview image is available at [immanuelchurchofamerica.org/link-preview.png](https://immanuelchurchofamerica.org/link-preview.png). Share apps may cache previews, so refresh the URL with a platform's sharing debugger when an updated image or description does not appear immediately.
+
+To create a new Render service, create a Blueprint in Render from this repository and provide a unique `ADMIN_PASSWORD` of at least 16 non-whitespace characters when prompted. Render generates `ADMIN_SESSION_SECRET`; keep it stable across restarts. For a different deployment, configure the custom domain and DNS records in the host and verify HTTPS.
 
 The app also supports `ICA_DATA_DIR` and `ICA_UPLOAD_DIR` for persistent storage on other hosts. Both directories should be on persistent storage, not an ephemeral deploy filesystem.
 

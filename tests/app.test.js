@@ -98,10 +98,13 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(home, /<img class="brand-mark" src="\/favicon.png"/);
   assert.match(home, /Since 1994/);
   assert.equal((await fetch(`${base}/favicon.png`)).status, 200);
-  assert.match(home, /<meta property="og:image" content="\/link-preview\.png">/);
+  assert.match(home, /<meta property="og:url" content="https:\/\/immanuelchurchofamerica\.org\/">/);
+  assert.match(home, /<meta property="og:image" content="https:\/\/immanuelchurchofamerica\.org\/link-preview\.png">/);
   assert.match(home, /<meta property="og:image:width" content="1200">/);
   assert.match(home, /<meta property="og:image:height" content="630">/);
   assert.match(home, /<meta name="twitter:card" content="summary_large_image">/);
+  assert.match(home, /<meta name="twitter:image" content="https:\/\/immanuelchurchofamerica\.org\/link-preview\.png">/);
+  assert.match(home, /<link rel="canonical" href="https:\/\/immanuelchurchofamerica\.org\/">/);
   const preview = await fetch(`${base}/link-preview.png`);
   assert.equal(preview.status, 200);
   assert.match(preview.headers.get('content-type'), /image\/png/);
@@ -120,6 +123,8 @@ test('public pages render, landing is the information page', async (t) => {
   const about = await fetch(`${base}/about`);
   assert.equal(about.status, 200);
   const aboutHtml = await about.text();
+  assert.match(aboutHtml, /<meta property="og:url" content="https:\/\/immanuelchurchofamerica\.org\/about">/);
+  assert.match(aboutHtml, /<link rel="canonical" href="https:\/\/immanuelchurchofamerica\.org\/about">/);
   assert.match(aboutHtml, /<h1>.*About.*소개.*<\/h1>/s);
   for (const detail of [
     'We are a family church.', 'Our preaching is biblically sound.',
