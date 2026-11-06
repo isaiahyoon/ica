@@ -11,7 +11,6 @@ import * as view from './lib/render.js';
 const root = path.dirname(fileURLToPath(import.meta.url));
 
 const AUDIO = { exts: ['.mp3', '.m4a', '.aac', '.wav', '.ogg'], max: 200 * 1024 * 1024 };
-const IMAGE = { exts: ['.jpg', '.jpeg', '.png', '.webp', '.gif'], max: 15 * 1024 * 1024 };
 
 function uploader(dir, { exts, max }, mimePrefix, files) {
   return multer({
@@ -49,7 +48,6 @@ export function createApp({
   }
   const store = createStore(dataDir);
   const audioDir = path.join(uploadDir, 'audio');
-  const photoDir = path.join(uploadDir, 'photos');
   const pub = path.join(root, 'public');
   const loginLimiter = auth.createLoginLimiter();
 
@@ -67,7 +65,7 @@ export function createApp({
   });
   app.use(express.urlencoded({ extended: false, limit: '10kb', parameterLimit: 30 }));
   app.use(express.static(pub));
-  app.use('/uploads', express.static(uploadDir, { index: false, dotfiles: 'deny' }));
+  app.use('/uploads/audio', express.static(audioDir, { index: false, dotfiles: 'deny' }));
 
   const page = (req, res, opts) => {
     const admin = auth.isAdmin(req);
@@ -89,7 +87,6 @@ export function createApp({
   };
 
   const SERMONS_PER_PAGE = 10;
-  const PHOTOS_PER_PAGE = 20;
   const sortSermons = (list) => [...list].sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.createdAt.localeCompare(a.createdAt));
 
   app.get('/sermons', async (req, res) => {
@@ -98,14 +95,22 @@ export function createApp({
     page(req, res, { title: 'Sermons', active: 'sermons', body: view.sermonsPage({ ...(({ items, ...p }) => ({ sermons: items, pager: p }))(paginate(sermons, req, SERMONS_PER_PAGE)), admin, csrfToken: admin ? auth.csrfToken(req) : '' }) });
   });
 
-  app.get('/gallery', async (req, res) => {
-    const photos = (await store.read('photos')).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  app.get('/sermons/:id', async (req, res) => {
+    const sermon = (await store.read('sermons')).find((item) => item.id === req.params.id);
+    if (!sermon) {
+      return res.status(404).send(view.layout({
+        title: 'Not found', admin: auth.isAdmin(req),
+        body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }),
+      }));
+    }
     const admin = auth.isAdmin(req);
-    const paged = paginate(photos, req, PHOTOS_PER_PAGE);
-    page(req, res, { title: 'Gallery', active: 'gallery', wide: true, body: view.galleryPage({
-      photos: paged.items, allPhotos: photos, startIndex: (paged.current - 1) * PHOTOS_PER_PAGE,
-      pager: (({ items, ...p }) => p)(paged), admin, csrfToken: admin ? auth.csrfToken(req) : '',
-    }) });
+    page(req, res, {
+      title: 'Sermons', active: 'sermons',
+      body: view.sermonsPage({
+        sermons: [sermon], pager: { current: 1, pages: 1 }, single: true,
+        admin, csrfToken: admin ? auth.csrfToken(req) : '',
+      }),
+    });
   });
 
   app.get('/admin/login', (req, res) => {
@@ -137,11 +142,11 @@ export function createApp({
   });
 
   const adminView = async (req, res, status = 200, extra = {}) => {
-    const [sermons, photos] = await Promise.all([store.read('sermons'), store.read('photos')]);
+    const sermons = await store.read('sermons');
     res.set('Cache-Control', 'no-store');
     res.status(status).send(view.layout({
       title: 'Admin', active: 'admin', admin: true,
-      body: view.adminPage({ sermons, photos, csrfToken: auth.csrfToken(req), ...extra }),
+      body: view.adminPage({ sermons, csrfToken: auth.csrfToken(req), ...extra }),
     }));
   };
 
@@ -184,22 +189,6 @@ export function createApp({
       res.redirect('/admin?notice=' + encodeURIComponent('Sermon uploaded.'));
     });
 
-  app.post('/admin/photos', auth.requireAdmin,
-    auth.requireSameOrigin,
-    handleUpload(uploader(photoDir, IMAGE, 'image/', 50).array('photos', 50)),
-    csrfAfterUpload(photoDir),
-    async (req, res) => {
-      if (!req.files?.length) return adminView(req, res, 400, { error: 'Please choose at least one photo.' });
-      const shared = clean(req.body.caption, 200);
-      const each = [].concat(req.body.captions ?? []);
-      const now = Date.now();
-      await store.update('photos', (list) => [...list, ...req.files.map((f, i) => ({
-        id: crypto.randomUUID(), caption: clean(each[i], 200) || shared, file: f.filename,
-        createdAt: new Date(now + i).toISOString(),
-      }))]);
-      res.redirect('/admin?notice=' + encodeURIComponent(`${req.files.length} photo(s) added.`));
-    });
-
   app.post('/admin/sermons/:id/edit', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, async (req, res) => {
     const title = clean(req.body.title, 140);
     const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date ?? '') ? req.body.date : '';
@@ -220,18 +209,6 @@ export function createApp({
     res.redirect(`/sermons${pageNo > 1 ? `?page=${pageNo}` : ''}#sermon-${req.params.id}`);
   });
 
-  app.post('/admin/photos/:id/edit', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, async (req, res) => {
-    const caption = clean(req.body.caption, 200);
-    let found = false;
-    await store.update('photos', (list) => list.map((p) => {
-      if (p.id !== req.params.id) return p;
-      found = true;
-      return { ...p, caption };
-    }));
-    if (!found) return res.status(404).send(view.layout({ title: 'Not found', admin: true, body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }) }));
-    res.redirect('/gallery');
-  });
-
   const remove = (name, dir, back) => async (req, res) => {
     let gone = [];
     await store.update(name, (list) => {
@@ -242,7 +219,6 @@ export function createApp({
     res.redirect(back);
   };
   app.post('/admin/sermons/:id/delete', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, remove('sermons', audioDir, '/sermons'));
-  app.post('/admin/photos/:id/delete', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, remove('photos', photoDir, '/gallery'));
 
   app.use((req, res) => res.status(404).send(view.layout({
     title: 'Not found', admin: auth.isAdmin(req),
@@ -266,7 +242,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const uploadDir = process.env.ICA_UPLOAD_DIR || path.join(root, 'uploads');
   await fs.mkdir(dataDir, { recursive: true });
   await fs.mkdir(path.join(uploadDir, 'audio'), { recursive: true });
-  await fs.mkdir(path.join(uploadDir, 'photos'), { recursive: true });
   const port = Number(process.env.PORT) || 8100;
   createApp({ dataDir, uploadDir, password }).listen(port, () => {
     console.log(`ICA running at http://localhost:${port}`);

@@ -22,10 +22,10 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 
 - `/` — Information page (the landing page). Never invent service times, addresses, or doctrine.
 - `/about` — public About page: family church, worship style, preaching, creed and Lord's Prayer, and leadership (head pastor and elders with phone links). Content comes from the owner; never invent details.
-- `/sermons` — public audio list; `/gallery` — public photo gallery.
+- `/sermons` — public audio list and individual sermon pages.
 - `/contact` — public contact page with the church address, Google Maps link, service and visitor information, and Instagram page. 1 Corinthians 13:12 appears beside the church logo at the bottom. Linked from the Connect card on `/`.
 - `/font-study.html` — standalone English and Korean typeface specimen.
-- `/admin` — sign-in required; upload/delete sermon audio and gallery photos.
+- `/admin` — sign-in required; upload/delete sermon audio.
 
 ## Running locally
 
@@ -39,7 +39,7 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 
 - Admin-only routes must use `auth.requireAdmin`; state-changing admin routes must also enforce same-origin and CSRF checks.
 - Production requires `ADMIN_SESSION_SECRET` (at least 32 bytes), HTTPS, and a unique `ADMIN_PASSWORD` of at least 16 non-whitespace characters. Session and rate-limit state are single-process only; use shared stores before horizontal scaling.
-- Uploads are whitelisted by extension **and** MIME prefix, size-limited, and stored under unique generated (UUID) names (never the user's filename). No SVG/HTML uploads.
+- Audio uploads are whitelisted by extension **and** MIME prefix, size-limited, and stored under unique generated (UUID) names (never the user's filename).
 - Never commit `data/`, `uploads/`, or secrets.
 
 # Design System
@@ -51,10 +51,10 @@ The look draws from the sibling project `src/word` (KRV edition: `styles/theme.c
 - **Accents, used liberally** (cards, borders, glows): pink `#fad4e0`, lavender `#dcd7f7`, yellow `#fffecf`. Never let accents outweigh blue.
 - **Type:** English uses regular-weight Cormorant Garamond (serif) and Optima (sans-serif); Korean uses Noto Serif KR (serif) and Noto Sans KR (sans-serif). Serif is for headings and all Scripture; sans-serif is for body copy, buttons, and explanatory text. Scripture must always use serif and no text is italicized. Provide Korean alongside all fixed English interface/copy, with comfortable separation between language lines.
 - **Shape:** angular and regal, with square-cornered panels, cards, buttons, and active nav items framed by a metal-plated rim; generous whitespace.
-- **Metal plating:** `--gold` (hero, cornerstone, primary buttons, active nav, header/footer rules), `--silver` (cards, panels, secondary buttons, inputs), `--brass-plate` (warm accents such as gallery frames and alerts). Plated components set `--plate`, `--fill`, and `--rim`; the shared frame rule in `public/styles.css` draws the rim. Fills must be opaque (the plate shows through translucent fills). Add new components to that shared selector list rather than using `border-radius`.
+- **Metal plating:** `--gold` (hero, cornerstone, primary buttons, active nav, header/footer rules), `--silver` (cards, panels, secondary buttons, inputs), `--brass-plate` (warm accents such as alerts). Plated components set `--plate`, `--fill`, and `--rim`; the shared frame rule in `public/styles.css` draws the rim. Fills must be opaque (the plate shows through translucent fills). Add new components to that shared selector list rather than using `border-radius`.
 - **Buttons:** one design — square-cornered, gold-plated navy `.btn-primary`; silver-plated `.btn-ghost` for secondary actions. Focus re-plates the control in the focus colour.
 - All colors are CSS variables in `:root` of `public/styles.css`; don't hard-code new hex values in components.
-- Accessibility: visible focus rings, skip link, sufficient contrast, `prefers-reduced-motion` respected, responsive down to phones, alt text on photos.
+- Accessibility: visible focus rings, skip link, sufficient contrast, `prefers-reduced-motion` respected, responsive down to phones, alt text on meaningful images.
 
 ## Character the site should embody
 

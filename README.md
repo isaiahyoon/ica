@@ -8,10 +8,9 @@ Church website prototype.
 
 - **Information page** (landing page, `/`) — welcome and overview; About details to come.
 - **About** (`/about`) — bilingual page on our family church, worship style, preaching, what we affirm, and leadership with contact numbers.
-- **Sermons** (`/sermons`) — public audio player list with native sharing where supported and a copy-link fallback.
-- **Gallery** (`/gallery`) — public photo gallery.
-- **Contact** (`/contact`) — address with a Google Maps link, worship times, visitor details, and Instagram; includes 1 Corinthians 13:12 beside the church logo and is linked from the Connect card on the welcome page.
-- **Admin** (`/admin`) — password-protected upload and removal of sermon audio and photos.
+- **Sermons** (`/sermons`, `/sermons/:id`) — public audio player list and individual sermon pages, with native sharing where supported and a copy-link option.
+- **Contact** (`/contact`) — address with a Google Maps link, worship times, visitor details, and Instagram; includes 1 Corinthians 13:12 beside the church logo and is linked from the welcome page.
+- **Admin** (`/admin`) — password-protected upload and removal of sermon audio.
 - **Font study** (`/font-study.html`) — English and Korean typeface specimens with a live four-font serif/sans pairing preview.
 
 ## Run locally
@@ -35,7 +34,7 @@ Login attempts are limited to 8 failures per client IP in 15 minutes. Login and 
 
 ## Deploy on Render
 
-The [Render Blueprint](render.yaml) creates a Node web service with a 1 GB persistent disk mounted at `/var/data`. Sermon/photo metadata and uploaded files are stored there so they survive deploys and restarts. The service uses one instance because admin sessions and login rate limits are held in memory.
+The [Render Blueprint](render.yaml) creates a Node web service with a 1 GB persistent disk mounted at `/var/data`. Sermon metadata and uploaded audio files are stored there so they survive deploys and restarts. The service uses one instance because admin sessions and login rate limits are held in memory.
 
 Create a Blueprint in Render from this repository and provide a unique `ADMIN_PASSWORD` of at least 16 non-whitespace characters when prompted. Render generates `ADMIN_SESSION_SECRET`; keep it stable across restarts. After the first deploy, add `immanuelchurchofamerica.org` in the service's **Settings → Custom Domains**, register the domain with a registrar if it is available, then set the DNS records Render displays and verify the domain. Render provisions HTTPS after DNS verification.
 
@@ -43,7 +42,7 @@ The app also supports `ICA_DATA_DIR` and `ICA_UPLOAD_DIR` for persistent storage
 
 ## Data
 
-Sermon and photo metadata is saved in `data/` and files in `uploads/` (both git-ignored). Delete those folders to reset.
+Sermon metadata is saved in `data/` and uploaded audio files in `uploads/` (both git-ignored). Delete those folders to reset.
 
 ## Design
 

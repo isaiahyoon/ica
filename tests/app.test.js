@@ -11,7 +11,6 @@ const PASSWORD = 'correct horse battery staple';
 async function boot() {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ica-'));
   await fs.mkdir(path.join(tmp, 'uploads/audio'), { recursive: true });
-  await fs.mkdir(path.join(tmp, 'uploads/photos'), { recursive: true });
   const app = createApp({ dataDir: path.join(tmp, 'data'), uploadDir: path.join(tmp, 'uploads'), password: PASSWORD });
   const server = app.listen(0);
   const base = `http://localhost:${server.address().port}`;
@@ -55,11 +54,12 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(home, /Since 1994/);
   assert.equal((await fetch(`${base}/favicon.png`)).status, 200);
   assert.equal((await fetch(`${base}/instagram-profile.png`)).status, 200);
-  for (const p of ['/sermons', '/gallery']) {
-    const response = await fetch(base + p);
-    assert.equal(response.status, 200);
-    assert.doesNotMatch(await response.text(), /href="\/admin(?:\/login)?"/);
-  }
+  const sermons = await fetch(`${base}/sermons`);
+  assert.equal(sermons.status, 200);
+  assert.doesNotMatch(await sermons.text(), /href="\/admin(?:\/login)?"/);
+  assert.equal((await fetch(`${base}/gallery`)).status, 404);
+  assert.doesNotMatch(home, /Gallery|사진 갤러리|See our life together/);
+  assert.doesNotMatch(home, /href="\/gallery"/);
   assert.doesNotMatch(home, /href="\/admin(?:\/login)?"/);
   assert.match(home, /<a class="brand home-link" href="\/"/);
   assert.match(home, /<nav[^>]*>[\s\S]*href="\/contact"[\s\S]*<\/nav>/);
@@ -113,12 +113,17 @@ test('configured storage paths serve persistent sermon data and uploads', async 
   const dataDir = path.join(tmp, 'data');
   const uploadDir = path.join(tmp, 'uploads');
   await fs.mkdir(dataDir, { recursive: true });
+  await fs.mkdir(path.join(uploadDir, 'audio'), { recursive: true });
   await fs.mkdir(path.join(uploadDir, 'photos'), { recursive: true });
   await fs.writeFile(path.join(dataDir, 'sermons.json'), JSON.stringify([{
     id: 'persisted-sermon', title: 'Persisted sermon', speaker: '', date: '',
     scripture: '', description: '', file: 'sermon.mp3', createdAt: new Date().toISOString(),
   }]));
   await fs.writeFile(path.join(uploadDir, 'photos', 'persisted.png'), 'photo');
+  await fs.writeFile(path.join(dataDir, 'photos.json'), JSON.stringify([{
+    id: 'legacy-photo', caption: 'Legacy photo', file: 'persisted.png',
+    createdAt: new Date().toISOString(),
+  }]));
 
   const previousDataDir = process.env.ICA_DATA_DIR;
   const previousUploadDir = process.env.ICA_UPLOAD_DIR;
@@ -145,9 +150,8 @@ test('configured storage paths serve persistent sermon data and uploads', async 
 
   const sermons = await (await fetch(`${base}/sermons`)).text();
   assert.match(sermons, /Persisted sermon/);
-  const photo = await fetch(`${base}/uploads/photos/persisted.png`);
-  assert.equal(photo.status, 200);
-  assert.equal(await photo.text(), 'photo');
+  assert.equal((await fetch(`${base}/gallery`)).status, 404);
+  assert.equal((await fetch(`${base}/uploads/photos/persisted.png`)).status, 404);
 });
 
 test('sermons can be shared with the native share sheet or copied as a link', async (t) => {
@@ -160,8 +164,17 @@ test('sermons can be shared with the native share sheet or copied as a link', as
   }]));
   const html = await (await fetch(`${base}/sermons`)).text();
   assert.match(html, /data-share-title="A sermon"/);
+  assert.match(html, /class="btn btn-ghost sermon-action share-link" href="\/sermons\/share-id"/);
+  assert.match(html, /class="btn btn-ghost sermon-action copy-link" href="\/sermons\/share-id"/);
   assert.match(html, /class="btn btn-ghost sermon-action share-link"[\s\S]*Share sermon[\s\S]*설교 공유/);
   assert.match(html, /class="btn btn-ghost sermon-action copy-link"[\s\S]*Copy link[\s\S]*링크 복사/);
+  const detailResponse = await fetch(`${base}/sermons/share-id`);
+  assert.equal(detailResponse.status, 200);
+  const detailHtml = await detailResponse.text();
+  assert.match(detailHtml, /href="\/sermons"><span class="bilingual"><span lang="en">All sermons<\/span>/);
+  assert.match(detailHtml, /<h3>A sermon<\/h3>/);
+  assert.doesNotMatch(detailHtml, /class="pagination"/);
+  assert.equal((await fetch(`${base}/sermons/missing-sermon`)).status, 404);
   const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
   assert.ok(script);
 
@@ -175,11 +188,11 @@ test('sermons can be shared with the native share sheet or copied as a link', as
     const links = {
       share: {
         dataset: { shareTitle: 'A sermon', copied: 'Link copied · 링크 복사됨' }, innerHTML: 'Share sermon', textContent: '',
-        getAttribute: () => '/sermons#sermon-share-id',
+        getAttribute: () => '/sermons/share-id',
       },
       copy: {
         dataset: { copied: 'Link copied · 링크 복사됨' }, innerHTML: 'Copy link', textContent: '',
-        getAttribute: () => '/sermons#sermon-share-id',
+        getAttribute: () => '/sermons/share-id',
       },
     };
     const eventFor = (action) => ({
@@ -197,12 +210,12 @@ test('sermons can be shared with the native share sheet or copied as a link', as
   assert.equal(shareEvent.prevented, true);
   assert.equal(shared.length, 1);
   assert.equal(shared[0].title, 'A sermon');
-  assert.equal(shared[0].url, `${base}/sermons#sermon-share-id`);
+  assert.equal(shared[0].url, `${base}/sermons/share-id`);
 
   let copied;
   const shareFallback = createHandler({ clipboard: { writeText: async (url) => { copied = url; } } });
   await shareFallback.handler(shareFallback.eventFor('share'));
-  assert.equal(copied, `${base}/sermons#sermon-share-id`);
+  assert.equal(copied, `${base}/sermons/share-id`);
   assert.equal(shareFallback.links.share.textContent, 'Link copied · 링크 복사됨');
 
   const fallback = createHandler({
@@ -212,7 +225,7 @@ test('sermons can be shared with the native share sheet or copied as a link', as
   const copyEvent = fallback.eventFor('copy');
   await fallback.handler(copyEvent);
   assert.equal(copyEvent.prevented, true);
-  assert.equal(copied, `${base}/sermons#sermon-share-id`);
+  assert.equal(copied, `${base}/sermons/share-id`);
   assert.equal(fallback.links.copy.textContent, 'Link copied · 링크 복사됨');
 
   const canceled = createHandler({
@@ -224,7 +237,7 @@ test('sermons can be shared with the native share sheet or copied as a link', as
 
   const direct = createHandler({});
   await direct.handler(direct.eventFor('copy'));
-  assert.equal(direct.location.href, `${base}/sermons#sermon-share-id`);
+  assert.equal(direct.location.href, `${base}/sermons/share-id`);
 });
 
 test('admin routes require sign in; missing and incorrect passwords are rejected', async (t) => {
@@ -322,16 +335,17 @@ test('admin login enforces same-origin requests and throttles failed attempts', 
   assert.match(limited.headers.get('cache-control'), /no-store/i);
 });
 
-test('admin can upload, list and delete sermon audio and photos', async (t) => {
+test('admin can upload, list and delete sermon audio', async (t) => {
   const { base, uploadDir, close } = await boot();
   t.after(close);
   const cookie = await login(base);
   const csrf = await csrfToken(base, cookie);
   const adminPage = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
-  assert.match(adminPage, /href="\/gallery"><span class="bilingual"><span lang="en">Manage gallery<\/span>/);
-  assert.match(adminPage, /id="photo-captions" class="photo-upload-list" role="list"/);
-  assert.match(adminPage, /URL\.createObjectURL\(file\)/);
-  assert.match(adminPage, /row\.append\(figure, label\)/);
+  assert.doesNotMatch(adminPage, /photo|gallery|사진|갤러리/i);
+  assert.equal((await fetch(`${base}/gallery`)).status, 404);
+  assert.equal((await fetch(`${base}/admin/photos`, {
+    method: 'POST', headers: { cookie, origin: base }, redirect: 'manual',
+  })).status, 404);
 
   const s = new FormData();
   s.set('_csrf', csrf);
@@ -350,7 +364,8 @@ test('admin can upload, list and delete sermon audio and photos', async (t) => {
   const sermons = await (await fetch(`${base}/sermons`)).text();
   assert.match(sermons, /&lt;b&gt;Grace&lt;\/b&gt;/);
   const sid = sermons.match(/id="sermon-([^"]+)"/)[1];
-  assert.match(sermons, new RegExp(`href="/sermons#sermon-${sid}"`));
+  assert.match(sermons, new RegExp(`href="/sermons/${sid}"`));
+  assert.equal((await fetch(`${base}/sermons/${sid}`)).status, 200);
   const src = sermons.match(/src="(\/uploads\/audio\/[^"]+)"/)[1];
   assert.equal((await fetch(base + src)).status, 200);
 
@@ -369,44 +384,6 @@ test('admin can upload, list and delete sermon audio and photos', async (t) => {
   bad.set('title', 't'); bad.set('audio', new Blob(['x'], { type: 'text/html' }), 'x.html');
   assert.equal((await fetch(`${base}/admin/sermons`, { method: 'POST', body: bad, headers: { cookie, origin: base } })).status, 400);
 
-  const p = new FormData();
-  p.set('_csrf', csrf);
-  p.append('photos', new Blob([new Uint8Array([1])], { type: 'image/png' }), 'a.png');
-  p.set('caption', 'Picnic');
-  assert.equal((await fetch(`${base}/admin/photos`, { method: 'POST', body: p, headers: { cookie, origin: base }, redirect: 'manual' })).status, 302);
-  const publicGallery = await (await fetch(`${base}/gallery`)).text();
-  assert.match(publicGallery, /Picnic/);
-  assert.doesNotMatch(publicGallery, /<form[^>]*class="[^"]*photo-caption-edit|class="lightbox-caption-form"/);
-
-  const b = new FormData();
-  b.set('_csrf', csrf);
-  for (const n of ['b1', 'b2']) b.append('photos', new Blob([new Uint8Array([1])], { type: 'image/png' }), n + '.png');
-  b.set('caption', 'Shared');
-  b.append('captions', 'First one'); b.append('captions', '');
-  assert.equal((await fetch(`${base}/admin/photos`, { method: 'POST', body: b, headers: { cookie, origin: base }, redirect: 'manual' })).status, 302);
-  const gal = await (await fetch(`${base}/gallery`, { headers: { cookie } })).text();
-  assert.match(gal, /First one/);
-  assert.match(gal, /Shared/);
-  assert.match(gal, /class="lightbox-caption-form"/);
-  assert.match(gal, /captionForm\.action = '\/admin\/photos\/' \+ encodeURIComponent\(photo\.id\) \+ '\/edit'/);
-  assert.match(gal, /captionField\.value = photo\.caption \|\| ''/);
-  const pid = gal.match(/\/admin\/photos\/([^/]+)\/edit/)[1];
-  const bodyEdit = new URLSearchParams({ _csrf: csrf, caption: 'Edited <i>' });
-  const edit = await fetch(`${base}/admin/photos/${pid}/edit`, { method: 'POST', body: bodyEdit, headers: { cookie, origin: base }, redirect: 'manual' });
-  assert.equal(edit.status, 302);
-  assert.match(await (await fetch(`${base}/gallery`)).text(), /Edited &lt;i&gt;/);
-
-  const maxBatch = new FormData();
-  maxBatch.set('_csrf', csrf);
-  for (let i = 0; i < 50; i++) {
-    maxBatch.append('photos', new Blob([new Uint8Array([1])], { type: 'image/png' }), `batch-${i}.png`);
-  }
-  const batchUpload = await fetch(`${base}/admin/photos`, {
-    method: 'POST', body: maxBatch, headers: { cookie, origin: base }, redirect: 'manual',
-  });
-  assert.equal(batchUpload.status, 302);
-  assert.equal(new URL(batchUpload.headers.get('location'), base).searchParams.get('notice'), '50 photo(s) added.');
-
   const admin = await (await fetch(`${base}/sermons`, { headers: { cookie } })).text();
   const del = admin.match(/action="(\/admin\/sermons\/[^"]+\/delete)"/)[1];
   const deleted = await fetch(base + del, {
@@ -419,15 +396,14 @@ test('admin can upload, list and delete sermon audio and photos', async (t) => {
   assert.equal((await fetch(base + src)).status, 404);
 });
 
-test('sermons paginate at 10 and gallery at 20', async (t) => {
+test('sermons paginate at 10', async (t) => {
   const { base, dataDir, close } = await boot();
   t.after(close);
   const mk = (n, extra) => Array.from({ length: n }, (_, i) => ({
-    id: `id${i}`, title: `T${i}`, caption: `C${i}`, file: `f${i}.mp3`, ...extra(i),
+    id: `id${i}`, title: `T${i}`, file: `f${i}.mp3`, ...extra(i),
   }));
   await fs.mkdir(dataDir, { recursive: true });
   await fs.writeFile(path.join(dataDir, 'sermons.json'), JSON.stringify(mk(23, (i) => ({ createdAt: new Date(i * 1000).toISOString() }))));
-  await fs.writeFile(path.join(dataDir, 'photos.json'), JSON.stringify(mk(45, (i) => ({ createdAt: new Date(i * 1000).toISOString() }))));
   const count = (h, re) => (h.match(re) || []).length;
   const s1 = await (await fetch(`${base}/sermons`)).text();
   assert.equal(count(s1, /<article class="sermon"/g), 10);
@@ -439,10 +415,4 @@ test('sermons paginate at 10 and gallery at 20', async (t) => {
   assert.equal(count(s3, /<article class="sermon"/g), 3);
   assert.equal(count(await (await fetch(`${base}/sermons?page=99`)).text(), /<article class="sermon"/g), 3);
   assert.equal(count(await (await fetch(`${base}/sermons?page=abc`)).text(), /<article class="sermon"/g), 10);
-  assert.equal(count(await (await fetch(`${base}/gallery`)).text(), /<img src="\/uploads\/photos/g), 20);
-  const galleryPage3 = await (await fetch(`${base}/gallery?page=3`)).text();
-  assert.equal(count(galleryPage3, /<img src="\/uploads\/photos/g), 5);
-  assert.match(galleryPage3, /data-photos="[^"]*id44/);
-  assert.match(galleryPage3, /const startIndex = 40;/);
-  assert.match(galleryPage3, /addEventListener\('wheel'/);
 });
