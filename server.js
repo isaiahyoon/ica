@@ -73,7 +73,7 @@ export function createApp({
   const page = (req, res, opts) => {
     const admin = auth.isAdmin(req);
     if (admin) res.set('Cache-Control', 'no-store');
-    res.send(view.layout({ ...opts, admin }));
+    res.send(view.layout({ ...opts, admin, path: req.path }));
   };
 
   app.get('/', (req, res) => page(req, res, { active: 'home', body: view.homePage() }));
@@ -103,6 +103,7 @@ export function createApp({
     if (!sermon) {
       return res.status(404).send(view.layout({
         title: 'Not found', admin: auth.isAdmin(req),
+        path: req.path,
         body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }),
       }));
     }
@@ -211,6 +212,7 @@ export function createApp({
 
   app.use((req, res) => res.status(404).send(view.layout({
     title: 'Not found', admin: auth.isAdmin(req),
+    path: req.path,
     body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }),
   })));
 
@@ -218,6 +220,7 @@ export function createApp({
     console.error(err);
     res.status(500).send(view.layout({
       title: 'Error', admin: auth.isAdmin(req),
+      path: req.path,
       body: view.messagePage({ title: 'Something went wrong', text: 'Please try again in a moment.' }),
     }));
   });
