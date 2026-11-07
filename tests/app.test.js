@@ -167,7 +167,8 @@ test('public pages render, landing is the information page', async (t) => {
   assert.ok(webmaster, 'Ministry team should include Isaiah Yoon');
   assert.match(webmaster, /lang="ko">\(윤이사야\)<\/span>/);
   assert.match(webmaster, /lang="en">Webmaster · A\/V Technician · Social Media Manager<\/span>/);
-  assert.match(webmaster, /lang="ko">웹사이트 관리자 · 음향/영상 담당 · 소셜 미디어 관리자<\/span>/);
+  assert.ok(webmaster.includes('<span lang="ko">웹사이트 관리자 · 음향/영상 담당 · 소셜 미디어 관리자</span>'),
+    'Webmaster should show all three Korean roles');
   assert.doesNotMatch(ministryTeam, /Bok Hee Park|박복희|Kelly Kim|김켈리/);
   assert.equal((ministryTeam.match(/class="person-role"/g) || []).length, 5,
     'Each ministry team member should have a right-side role');
