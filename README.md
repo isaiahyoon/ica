@@ -6,11 +6,12 @@ Public website: [immanuelchurchofamerica.org](https://immanuelchurchofamerica.or
 
 ## Features
 
-- **Information page** (landing page, `/`) — welcome and overview; About details to come.
+- **Information page** (landing page, `/`) — welcome and overview, with Scripture passages that open English KJV and Korean KRV links to that passage.
 - **About** (`/about`) — bilingual page on our family church, worship services and times, worship style, preaching, what we affirm, and leadership with contact numbers.
-- **Sermons** (`/sermons`, `/sermons/:id`) — public audio player list and individual sermon pages, with native sharing where supported and a copy-link option.
+- **Sermons** (`/sermons`, `/sermons/:id`) — public audio player list and individual sermon pages, with native sharing where supported, a copy-link option, and English KJV and Korean KRV links for recognized Scripture references, including matching bilingual references such as `Song of Songs 1:1 (아가서 1:1)`.
+- **Clickable Scripture** — silver-plated borders and a disclosure marker identify passage menus across the site; hover and expanded states use gold plating, with visible keyboard-focus feedback and reduced-motion support. Unrecognized or conflicting references remain plain text.
 - **Link previews** — absolute, bilingual Open Graph and Twitter Card metadata with a custom 1200×630 preview image; the canonical URL is set for each page.
-- **Contact** (`/contact`) — address with a Google Maps link, a bilingual location diagram showing the parking lot directly behind the building's south side, visitor details, and Instagram, with a link to worship times on About; includes 1 Corinthians 13:12 beside the church logo and is linked from the welcome page.
+- **Contact** (`/contact`) — address with a Google Maps link, a bilingual location diagram showing the parking lot directly behind the building's south side, visitor details, and Instagram, with a link to worship times on About; includes a clickable 1 Corinthians 13:12 verse beside the church logo, with English KJV and Korean KRV links, and is linked from the welcome page.
 - **Admin** (`/admin`) — two-step sign-in (password, then authenticator code) for upload and removal of sermon audio; audio starts uploading as soon as it is selected, while sermon details can be entered; the owner can add, reset, and remove other admins.
 - **Font study** (`/font-study.html`) — English and Korean typeface specimens with a live four-font serif/sans pairing preview.
 
@@ -26,6 +27,29 @@ ADMIN_PASSWORD='use-a-unique-passphrase-of-16-characters-or-more' npm start   # 
 If `ADMIN_PASSWORD` is not set in local development, a freshly generated password is printed in the terminal on each start. Production requires `ADMIN_PASSWORD`. Sign in at `/admin/login`.
 
 Other commands: `npm run dev` (auto-restart), `npm test`, `npm run reset-owner-2fa` (clears the owner's authenticator if their phone and recovery codes are both lost). Set `PORT` to change the port.
+
+## Local sermon transcription for Instagram drafts
+
+This optional command runs **only on an Apple Silicon Mac**, with macOS 15+ and Python 3.10+. It is not a website feature or Render dependency: no public/admin transcription endpoint is added. The free Whisper model runs locally; recordings are never uploaded to a transcription service. The first run downloads model weights (roughly 1.6 GB) from Hugging Face; later runs reuse the local cache.
+
+Install the isolated transcription environment once:
+
+```sh
+npm run transcribe:setup
+```
+
+Transcribe a local audio file or an individual public church sermon link:
+
+```sh
+npm run transcribe -- "/path/to/sermon.m4a"
+npm run transcribe -- "https://immanuelchurchofamerica.org/sermons/eb590a2a-e48d-4160-b335-cdff6b3352cc"
+```
+
+Korean is the default spoken language; use `--language en` for an English recording. The command converts audio with macOS `afconvert`, transcribes ten-minute chunks, prints progress, and saves a timestamped `.txt` transcript plus a `.json` transcript with source, model, language, duration, and completion status. Outputs default to `data/transcripts/` (git-ignored and not served by Express). Use `--output data/transcripts/my-sermon` to choose another filename prefix; existing transcripts are not overwritten. Temporary downloaded audio and converted WAV files are cleaned up automatically. An interrupted or failed transcription remains clearly marked **INCOMPLETE**, not a finished transcript.
+
+To draft an Instagram post, give the completed transcript to the assistant and ask: “Summarize this sermon in English for the church's Instagram, with the main message, three takeaways, and the sermon link.” The command itself does not generate or publish summaries, call a paid API, or post to Instagram. Review the draft against the recording before publishing: machine transcripts can mishear Korean names and Scripture references, especially during songs, silence, or group prayer. Do not invent quotations, sermon points, or passage references.
+
+The optional tool's automated tests run with `npm test` and require `python3`, but do not download a model or require the transcription environment.
 
 ## Admin security
 
