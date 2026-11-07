@@ -130,7 +130,7 @@ test('public pages render, landing is the information page', async (t) => {
   for (const detail of [
     'We are a family church.', 'Our preaching is biblically sound.',
     'late 19th and 20th centuries', 'We affirm the Apostles’ Creed and the Lord’s Prayer.',
-    'John Yoon', '(윤태선)', 'href="tel:+13237312323"',
+    'John Yoon', '(윤태선)', 'href="tel:+13237319191"',
     'Joshua Won', '(원 여호수아)', 'href="tel:+12132105582"',
     'Kyu Ho Yeo', '(여규호)', 'href="tel:+12135037883"',
     'Hyi Shik Lee', '(이희식)', 'href="tel:+12132486700"',
