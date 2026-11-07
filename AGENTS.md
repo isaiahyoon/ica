@@ -20,6 +20,13 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 - After every feature update, run the full test suite with `npm test` before finishing, and fix or report any failures.
 - Every new feature needs automated tests for its behavior. Tests must be independent and parallel-safe: use a temp directory and an ephemeral port (`listen(0)`) per test, as in `tests/app.test.js`.
 
+## Code quality and modularity
+
+- Keep code simple, focused, readable, and maintainable. Use clear names, small functions with cohesive responsibilities, and existing shared helpers; avoid duplication, dead code, and unnecessary abstraction.
+- Organize JavaScript, templates, styles, and tests by responsibility. Keep each change with its owning module or page, and extract a separate module or reusable component when it provides a clear, cohesive boundary.
+- Follow the existing architecture: page templates live in `lib/render.js`, and styles and design tokens live in `public/styles.css`. Keep related CSS together and reuse shared tokens and rules; do not split files or introduce new layers without a concrete maintainability benefit.
+- Keep changes surgical, preserve existing behavior, and test the behavior affected by each change.
+
 ## Pages
 
 - `/` — Information page (the landing page); displayed Scripture opens an accessible menu with English KJV and Korean KRV links to that passage. Never invent service times, addresses, or doctrine.
