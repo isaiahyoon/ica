@@ -152,6 +152,11 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(ministryTeam, /Myung Jun Park[\s\S]*Bok Hee Park[\s\S]*Kelly Kim/);
   assert.equal((ministryTeam.match(/class="person-role"/g) || []).length, 4,
     'Each ministry team member should have a right-side role');
+  const aboutCss = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  assert.match(aboutCss, /\.contact-grid > \.panel\s*\{[^}]*min-width:\s*0/s);
+  assert.match(aboutCss, /\.about-page \.people li\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(0,\s*1fr\)/s);
+  assert.match(aboutCss, /\.about-page \.person-role\s*\{[^}]*text-align:\s*right/);
+  assert.match(aboutCss, /@media \(max-width:\s*420px\)\s*\{[^}]*\.about-page \.ministry-team \.people li\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
   assert.match(aboutHtml, /href="\/about" aria-current="page" class="is-active"/);
   const contact = await fetch(`${base}/contact`);
   assert.equal(contact.status, 200);
