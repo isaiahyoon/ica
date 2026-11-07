@@ -134,7 +134,24 @@ test('public pages render, landing is the information page', async (t) => {
     'Joshua Won', '(원 여호수아)', 'href="tel:+12132105582"',
     'Kyu Ho Yeo', '(여규호)', 'href="tel:+12135037883"',
     'Hyi Shik Lee', '(이희식)', 'href="tel:+12132486700"',
+    'Eun Young Won', '(원은영)', 'Missionary', '전도사',
+    'Myung Jun Park', '(박명준)', 'Conductor · Deacon', '지휘자 · 집사',
+    'Bok Hee Park', '(박복희)', 'Accompanist · Deaconess', '반주자 · 권사',
+    'Kelly Kim', '(김켈리)', 'Administrative Assistant · Deacon', '행정간사 · 집사',
   ]) assert.ok(aboutHtml.includes(detail), `About page should include "${detail}"`);
+  const leadership = aboutHtml.match(/<h2><span class="bilingual"><span lang="en">Leadership<\/span>[\s\S]*?<\/section>/)?.[0];
+  assert.ok(leadership, 'About page should include its leadership section');
+  const leadershipOrder = ['Senior Pastor', 'Elders'];
+  const headingPositions = leadershipOrder.map((heading) => leadership.indexOf(`<span lang="en">${heading}</span>`));
+  assert.ok(headingPositions.every((position, index) => position >= 0 && (index === 0 || position > headingPositions[index - 1])),
+    'Leadership should list the senior pastor and elders');
+  const ministryTeam = aboutHtml.match(/<section class="panel ministry-team">([\s\S]*?)<\/section>/)?.[1];
+  assert.ok(ministryTeam, 'About page should show the ministry team in a separate card');
+  assert.match(ministryTeam, /<h2><span class="bilingual"><span lang="en">Ministry Team<\/span>/);
+  assert.match(ministryTeam, /Eun Young Won[\s\S]*class="person-role">[\s\S]*Missionary/);
+  assert.match(ministryTeam, /Myung Jun Park[\s\S]*Bok Hee Park[\s\S]*Kelly Kim/);
+  assert.equal((ministryTeam.match(/class="person-role"/g) || []).length, 4,
+    'Each ministry team member should have a right-side role');
   assert.match(aboutHtml, /href="\/about" aria-current="page" class="is-active"/);
   const contact = await fetch(`${base}/contact`);
   assert.equal(contact.status, 200);
@@ -169,7 +186,7 @@ test('public pages render, landing is the information page', async (t) => {
     'All are welcome.',
   ]) assert.ok(contactHtml.includes(detail), `Contact page should include "${detail}"`);
   const headings = (html) => [...html.matchAll(/<h2><span class="bilingual"><span lang="en">([^<]+)<\/span>/g)].map((match) => match[1]);
-  assert.deepEqual(headings(aboutHtml), ['A family church', 'Service Times', 'Worship', 'Preaching', 'What we affirm', 'Leadership']);
+  assert.deepEqual(headings(aboutHtml), ['A family church', 'Service Times', 'Worship', 'Preaching', 'What we affirm', 'Leadership', 'Ministry Team']);
   assert.deepEqual(headings(contactHtml), ['Visit us', 'A few helpful details', 'Stay connected']);
   const contactPanel = contactHtml.match(/<div class="panel visit-panel">([\s\S]*?)<\/div>\s*<\/div>\s*<section class="contact-scripture/);
   assert.ok(contactPanel, 'All contact information is in one panel, separate from the Scripture');
