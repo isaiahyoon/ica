@@ -15,6 +15,12 @@ Public website: [immanuelchurchofamerica.org](https://immanuelchurchofamerica.or
 - **Admin** (`/admin`) — two-step sign-in (password, then authenticator code) for upload and removal of sermon audio; audio starts uploading as soon as it is selected, while sermon details can be entered; the owner can add, reset, and remove other admins.
 - **Font study** (`/font-study.html`) — English and Korean typeface specimens with a live four-font serif/sans pairing preview.
 
+## Code layout
+
+- `server.js` defines the Express app and routes; `lib/` contains server-side rendering and supporting modules.
+- `public/scripts/` holds page-specific browser behavior, separate from the server-rendered HTML templates in `lib/render.js`.
+- `public/styles.css` is the shared stylesheet and design-token source; `tests/` contains the automated test suite.
+
 ## Run locally
 
 Requires Node 20+.

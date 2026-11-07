@@ -12,13 +12,22 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 - `lib/admins.js`, `lib/admin-routes.js`, `lib/totp.js` — two-step admin sign-in (password then TOTP/recovery code, no usernames), per-admin passwords and owner-managed admins; `scripts/reset-owner-2fa.js` clears the owner's authenticator.
 - `lib/store.js` — JSON-file store in `data/` (git-ignored). Uploaded files live in `uploads/` (git-ignored).
 - `scripts/transcribe-sermon.py` — optional local-only Apple Silicon Whisper transcription for audio files or church sermon URLs; timestamped transcripts in `data/transcripts/`, never a website endpoint.
+- `public/scripts/` — page-specific browser behavior, separate from server-rendered templates.
 - `public/styles.css` — the single stylesheet and all design tokens.
 - `tests/` — `node --test` end-to-end tests.
 
 ## Testing
 
 - After every feature update, run the full test suite with `npm test` before finishing, and fix or report any failures.
-- Every new feature needs automated tests for its behavior. Tests must be independent and parallel-safe: use a temp directory and an ephemeral port (`listen(0)`) per test, as in `tests/app.test.js`.
+- For every new feature, create or update automated tests alongside the implementation to verify its behavior and relevant edge cases; do not consider the feature complete without them.
+- Tests must be independent and parallel-safe: use a temp directory and an ephemeral port (`listen(0)`) per test, as in `tests/app.test.js`.
+
+## Code quality and modularity
+
+- Keep code simple, focused, readable, and maintainable. Use clear names, small functions with cohesive responsibilities, and existing shared helpers; avoid duplication, dead code, and unnecessary abstraction.
+- Organize JavaScript, templates, styles, and tests by responsibility. Keep each change with its owning module or page, and extract a separate module or reusable component when it provides a clear, cohesive boundary.
+- Follow the existing architecture: page templates live in `lib/render.js`, and styles and design tokens live in `public/styles.css`. Keep related CSS together and reuse shared tokens and rules; do not split files or introduce new layers without a concrete maintainability benefit.
+- Keep changes surgical, preserve existing behavior, and test the behavior affected by each change.
 
 ## Pages
 
