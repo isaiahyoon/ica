@@ -319,6 +319,7 @@ test('sermons can be shared with the native share sheet or copied as a link', as
   assert.equal(shareEvent.prevented, true);
   assert.equal(shared.length, 1);
   assert.equal(shared[0].title, 'A sermon');
+  assert.equal(shared[0].text, 'A sermon');
   assert.equal(shared[0].url, `${base}/sermons/share-id`);
 
   let copied;
