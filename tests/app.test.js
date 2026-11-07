@@ -136,8 +136,10 @@ test('public pages render, landing is the information page', async (t) => {
     'Hyi Shik Lee', '(이희식)', 'href="tel:+12132486700"',
     'Eun Young Won', '(원은영)', 'Missionary', '전도사',
     'Myung Jun Park', '(박명준)', 'Conductor · Deacon', '지휘자 · 집사',
-    'Bok Hee Park', '(박복희)', 'Accompanist · Deaconess', '반주자 · 권사',
-    'Kelly Kim', '(김켈리)', 'Administrative Assistant · Deacon', '행정간사 · 집사',
+    'Bok Hee Jung', '(정복희)', 'Accompanist · Senior Deaconess', '반주자 · 권사',
+    'Mark Iverson', 'Administrative Assistant', '행정간사',
+    'Isaiah Yoon', '(윤이사야)', 'Webmaster · A/V Technician · Social Media Manager',
+    '웹사이트 관리자 · 음향/영상 담당 · 소셜 미디어 관리자',
   ]) assert.ok(aboutHtml.includes(detail), `About page should include "${detail}"`);
   const leadership = aboutHtml.match(/<h2><span class="bilingual"><span lang="en">Leadership<\/span>[\s\S]*?<\/section>/)?.[0];
   assert.ok(leadership, 'About page should include its leadership section');
@@ -150,8 +152,24 @@ test('public pages render, landing is the information page', async (t) => {
   assert.ok(ministryTeam, 'About page should show the ministry team in a separate card');
   assert.match(ministryTeam, /<h2><span class="bilingual"><span lang="en">Ministry Team<\/span>/);
   assert.match(ministryTeam, /Eun Young Won[\s\S]*class="person-role">[\s\S]*Missionary/);
-  assert.match(ministryTeam, /Myung Jun Park[\s\S]*Bok Hee Park[\s\S]*Kelly Kim/);
-  assert.equal((ministryTeam.match(/class="person-role"/g) || []).length, 4,
+  assert.match(ministryTeam, /Myung Jun Park[\s\S]*Bok Hee Jung[\s\S]*Mark Iverson/);
+  const accompanist = ministryTeam.match(/<li><span class="person-name">Bok Hee Jung[\s\S]*?<\/li>/)?.[0];
+  assert.ok(accompanist, 'Ministry team should include Bok Hee Jung');
+  assert.match(accompanist, /lang="ko">\(정복희\)<\/span>/);
+  assert.match(accompanist, /lang="en">Accompanist · Senior Deaconess<\/span>/);
+  assert.match(accompanist, /lang="ko">반주자 · 권사<\/span>/);
+  const administrativeAssistant = ministryTeam.match(/<li><span class="person-name">Mark Iverson[\s\S]*?<\/li>/)?.[0];
+  assert.ok(administrativeAssistant, 'Ministry team should include Mark Iverson');
+  assert.match(administrativeAssistant, /lang="en">Administrative Assistant<\/span>/);
+  assert.match(administrativeAssistant, /lang="ko">행정간사<\/span>/);
+  assert.doesNotMatch(administrativeAssistant, /person-ko|Deacon|집사/);
+  const webmaster = ministryTeam.match(/<li><span class="person-name">Isaiah Yoon[\s\S]*?<\/li>/)?.[0];
+  assert.ok(webmaster, 'Ministry team should include Isaiah Yoon');
+  assert.match(webmaster, /lang="ko">\(윤이사야\)<\/span>/);
+  assert.match(webmaster, /lang="en">Webmaster · A\/V Technician · Social Media Manager<\/span>/);
+  assert.match(webmaster, /lang="ko">웹사이트 관리자 · 음향/영상 담당 · 소셜 미디어 관리자<\/span>/);
+  assert.doesNotMatch(ministryTeam, /Bok Hee Park|박복희|Kelly Kim|김켈리/);
+  assert.equal((ministryTeam.match(/class="person-role"/g) || []).length, 5,
     'Each ministry team member should have a right-side role');
   const aboutCss = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
   assert.match(aboutCss, /\.contact-grid > \.panel\s*\{[^}]*min-width:\s*0/s);
