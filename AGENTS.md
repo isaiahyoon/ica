@@ -6,7 +6,7 @@ Never go against Scripture, or regard it as false or untrustworthy. It will alwa
 
 Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Express, server-rendered HTML, no build step. Local prototype only — no domain/deployment concerns yet.
 
-- `server.js` — `createApp()` factory and routes (public pages, admin login, uploads, deletes).
+- `server.js` — `createApp()` factory and routes (public pages, admin login, staged sermon uploads, deletes).
 - `lib/render.js` — all HTML templates. Always escape user content with `esc()`.
 - `lib/auth.js` — admin password validation, revocable HttpOnly session cookie (pending vs. full stages), CSRF tokens, and bounded login throttling.
 - `lib/admins.js`, `lib/admin-routes.js`, `lib/totp.js` — two-step admin sign-in (password then TOTP/recovery code, no usernames), per-admin passwords and owner-managed admins; `scripts/reset-owner-2fa.js` clears the owner's authenticator.
@@ -41,6 +41,7 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 - Admin-only routes must use `auth.requireAdmin`; state-changing admin routes must also enforce same-origin and CSRF checks.
 - Production requires `ADMIN_SESSION_SECRET` (at least 32 bytes), HTTPS, and a unique `ADMIN_PASSWORD` of at least 16 non-whitespace characters. Session and rate-limit state are single-process only; use shared stores before horizontal scaling.
 - Audio uploads are whitelisted by extension **and** MIME prefix, size-limited, and stored under unique generated (UUID) names (never the user's filename).
+- Admin audio uploads are staged privately on file selection and published only with submitted sermon details; abandoned staged files expire after one hour.
 - Never commit `data/`, `uploads/`, or secrets.
 
 # Design System
