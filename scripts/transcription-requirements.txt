@@ -1,0 +1,2 @@
+mlx-whisper==0.4.3
+certifi>=2023.5.7

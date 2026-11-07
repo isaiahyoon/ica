@@ -93,6 +93,8 @@ test('public pages render, landing is the information page', async (t) => {
   const home = await (await fetch(base)).text();
   assert.match(home, /Immanuel Church of America/);
   assert.match(home, /<h1><span class="bilingual"><span lang="en">Immanuel Church of America<\/span><span lang="ko">미주 임마누엘 교회<\/span><\/span><\/h1>/);
+  assert.match(home, /href="https:\/\/theamazingword\.org\/kjv\/b\/matthew\/c\/1\/v\/23"/);
+  assert.match(home, /href="https:\/\/theamazingword\.org\/kjv\/b\/john\/c\/14\/v\/6"/);
   assert.doesNotMatch(home, /<p class="eyebrow" lang="ko">미주 임마누엘 교회<\/p>/);
   assert.match(home, /<link rel="icon" href="\/favicon\.png" type="image\/png">/);
   assert.match(home, /<img class="brand-mark" src="\/favicon.png"/);
@@ -143,6 +145,7 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(contactHtml, /The Glass of the Word<\/span>[\s\S]*<img src="\/favicon\.png"[\s\S]*말씀의 거울/);
   assert.match(contactHtml, /For now we see through a glass, darkly;.*1 Corinthians 13:12/s);
   assert.match(contactHtml, /고린도전서 13:12/);
+  assert.match(contactHtml, /href="https:\/\/theamazingword\.org\/kjv\/b\/1-corinthians\/c\/13\/v\/12"/);
   assert.match(contactHtml, /href="https:\/\/www\.google\.com\/maps\/place\/Immanuel\+Church\+of\+America\+%2F\+%EB%AF%B8%EC%A3%BC%EC%9E%84%EB%A7%88%EB%88%84%EC%97%98%EA%B5%90%ED%9A%8C\/@34\.0397122,-118\.3242422,17z\/data=!3m1!4b1!4m6!3m5!1s0x80c2b867941260c9:0xc64dfc88582a36a6!8m2!3d34\.0397078!4d-118\.3216673!16s%2Fg%2F1262s7wvv\?entry=ttu&amp;g_ep=EgoyMDI2MTEwMi4wIKXMDSoASAFQAw%3D%3D" target="_blank" rel="noopener noreferrer">[\s\S]*3406 W Washington Blvd 2F<br>Los Angeles, CA 90018/);
   assert.match(contactHtml, /href="https:\/\/www\.instagram\.com\/immanuelchurchofamerica\/" target="_blank" rel="noopener noreferrer">@immanuelchurchofamerica/);
   const serviceDetails = [
@@ -294,6 +297,7 @@ test('sermons can be shared with the native share sheet or copied as a link', as
       document: { addEventListener: (_type, callback) => { handler = callback; } },
       navigator, location, URL, setTimeout: () => 0,
     });
+
     const links = {
       share: {
         dataset: { shareTitle: 'A sermon', copied: 'Link copied · 링크 복사됨' }, innerHTML: 'Share sermon', textContent: '',
@@ -348,6 +352,76 @@ test('sermons can be shared with the native share sheet or copied as a link', as
   const direct = createHandler({});
   await direct.handler(direct.eventFor('copy'));
   assert.equal(direct.location.href, `${base}/sermons/share-id`);
+});
+
+test('scripture references offer language-specific Bible edition links', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'sermons.json'), JSON.stringify([
+    {
+      id: 'linked-reference', title: 'Linked reference', speaker: '', date: '',
+      scripture: 'John 3:16-18', description: '', file: 'sermon.mp3', createdAt: new Date().toISOString(),
+    },
+    {
+      id: 'korean-reference', title: 'Korean reference', speaker: '', date: '',
+      scripture: '요한복음 3:16', description: '', file: 'sermon-2.mp3', createdAt: new Date().toISOString(),
+    },
+    {
+      id: 'unlinked-reference', title: 'Unlinked reference', speaker: '', date: '',
+      scripture: 'Song of Songs', description: '', file: 'sermon-3.mp3', createdAt: new Date().toISOString(),
+    },
+    {
+      id: 'bilingual-reference', title: 'Bilingual reference', speaker: '', date: '',
+      scripture: 'Song of Songs 1:1 (아가서 1:1)', description: '', file: 'sermon-4.mp3', createdAt: new Date().toISOString(),
+    },
+    {
+      id: 'conflicting-reference', title: 'Conflicting reference', speaker: '', date: '',
+      scripture: 'John 3:16 (요한복음 3:17)', description: '', file: 'sermon-5.mp3', createdAt: new Date().toISOString(),
+    },
+  ]));
+
+  const html = await (await fetch(`${base}/sermons`)).text();
+  for (const [edition, language] of [['krv', '한국어'], ['kjv', 'English']]) {
+    assert.ok(
+      html.includes(`href="https://theamazingword.org/${edition}/b/john/c/3/v/16-18"`),
+      `should link John 3:16-18 in ${language}`,
+    );
+    const bilingualArticle = html.match(/<article class="sermon" id="sermon-bilingual-reference">([\s\S]*?)<\/article>/)?.[1];
+    assert.ok(bilingualArticle);
+    assert.ok(bilingualArticle.includes(`href="https://theamazingword.org/${edition}/b/song-of-solomon/c/1/v/1"`));
+  }
+  const languageMenus = [...html.matchAll(/<nav class="scripture-language-links"[^>]*>([\s\S]*?)<\/nav>/g)];
+  assert.ok(languageMenus.length > 0);
+  for (const [, menu] of languageMenus) {
+    const links = [...menu.matchAll(/<a ([^>]+)>/g)];
+    assert.equal(links.length, 2);
+    for (const [, attributes] of links) {
+      assert.match(attributes, /target="_blank"/);
+      assert.match(attributes, /rel="noopener noreferrer"/);
+    }
+  }
+  assert.doesNotMatch(html, /theamazingword\.org\/(?:diodati|licht|japbungo|moh|luz|alm)\//);
+  assert.match(html, /href="https:\/\/theamazingword\.org\/krv\/b\/john\/c\/3\/v\/16"/);
+  assert.match(html, /<summary class="scripture">John 3:16-18<\/summary>/);
+  assert.match(html, /aria-label="Korean or English Bible · 한국어 또는 영어 성경"/);
+  assert.match(html, /<p class="scripture">Song of Songs<\/p>/);
+  assert.match(html, /<summary class="scripture">Song of Songs 1:1 \(아가서 1:1\)<\/summary>/);
+  assert.match(html, /<p class="scripture">John 3:16 \(요한복음 3:17\)<\/p>/);
+  const single = await (await fetch(`${base}/sermons/bilingual-reference`)).text();
+  assert.match(single, /<summary class="scripture">Song of Songs 1:1 \(아가서 1:1\)<\/summary>/);
+  assert.match(single, /href="https:\/\/theamazingword\.org\/kjv\/b\/song-of-solomon\/c\/1\/v\/1"/);
+});
+
+test('clickable Scripture uses plated borders and hover, open, and keyboard-focus feedback', async () => {
+  const css = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  assert.match(css, /\.scripture-picker > summary\s*\{[^}]*position:\s*relative;[^}]*background:\s*var\(--plate/s);
+  assert.match(css, /\.scripture-picker > summary::before\s*\{[^}]*inset:\s*var\(--rim\)/s);
+  assert.match(css, /\.scripture-picker > summary\s*\{[^}]*--plate:\s*var\(--silver\);[^}]*--fill:\s*linear-gradient[^;]+;[^}]*--rim:\s*2px;[^}]*display:\s*list-item;[^}]*max-width:\s*100%;[^}]*cursor:\s*pointer/s);
+  assert.match(css, /\.scripture-picker > summary:hover,\s*\.scripture-picker > summary:focus-visible,\s*\.scripture-picker\[open\] > summary\s*\{[^}]*--plate:\s*var\(--gold\);[^}]*box-shadow:\s*var\(--shadow\)/s);
+  assert.match(css, /\.scripture-picker > summary:focus-visible\s*\{[^}]*--plate:\s*linear-gradient\(var\(--focus\), var\(--focus\)\)/s);
+  assert.match(css, /\.sermon p\.scripture\s*\{[^}]*border-left:/s);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\*\s*\{[^}]*transition:\s*none !important/s);
 });
 
 test('admin routes require sign in; missing and incorrect passwords are rejected', async (t) => {

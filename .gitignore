@@ -3,3 +3,5 @@ data/
 uploads/
 .env
 .DS_Store
+.venv-transcribe/
+__pycache__/

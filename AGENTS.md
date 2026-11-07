@@ -11,6 +11,7 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 - `lib/auth.js` — admin password validation, revocable HttpOnly session cookie (pending vs. full stages), CSRF tokens, and bounded login throttling.
 - `lib/admins.js`, `lib/admin-routes.js`, `lib/totp.js` — two-step admin sign-in (password then TOTP/recovery code, no usernames), per-admin passwords and owner-managed admins; `scripts/reset-owner-2fa.js` clears the owner's authenticator.
 - `lib/store.js` — JSON-file store in `data/` (git-ignored). Uploaded files live in `uploads/` (git-ignored).
+- `scripts/transcribe-sermon.py` — optional local-only Apple Silicon Whisper transcription for audio files or church sermon URLs; timestamped transcripts in `data/transcripts/`, never a website endpoint.
 - `public/styles.css` — the single stylesheet and all design tokens.
 - `tests/` — `node --test` end-to-end tests.
 
@@ -21,16 +22,18 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 
 ## Pages
 
-- `/` — Information page (the landing page). Never invent service times, addresses, or doctrine.
+- `/` — Information page (the landing page); displayed Scripture opens an accessible menu with English KJV and Korean KRV links to that passage. Never invent service times, addresses, or doctrine.
 - `/about` — public About page: family church, worship services and times, worship style, preaching, creed and Lord's Prayer, and leadership (senior pastor and elders with phone links). Content comes from the owner; never invent details.
-- `/sermons` — public audio list and individual sermon pages.
-- `/contact` — public contact page with the church address, Google Maps link, bilingual SVG location diagram (parking directly behind the building's south side), visitor information, and Instagram page, with a link to worship times on About. 1 Corinthians 13:12 appears beside the church logo at the bottom. Linked from the Connect card on `/`.
+- `/sermons` — public audio list and individual sermon pages; recognized Scripture references open an accessible menu with English KJV and Korean KRV links to that passage.
+- `/contact` — public contact page with the church address, Google Maps link, bilingual SVG location diagram (parking directly behind the building's south side), visitor information, and Instagram page, with a link to worship times on About. The 1 Corinthians 13:12 verse beside the church logo at the bottom opens a menu with English KJV and Korean KRV links. Linked from the Connect card on `/`.
 - `/font-study.html` — standalone English and Korean typeface specimen.
 - `/admin` — two-step sign-in required (`/admin/login` → `/admin/verify` or first-time `/admin/setup`); upload/delete sermon audio; the owner (holder of `ADMIN_PASSWORD`) manages other admins.
 
 ## Running locally
 
 `npm start` (http://localhost:8100). Set `ADMIN_PASSWORD`; otherwise a freshly generated password is printed at startup.
+
+For local sermon transcription, run `npm run transcribe:setup` once on an Apple Silicon Mac (macOS 15+, Python 3.10+), then `npm run transcribe -- "<audio file or church sermon URL>"`. Korean is the default; `--language en` selects English. The model runs locally without uploading recordings, with cached model weights downloaded on first use. Completed transcripts support assistant-written English Instagram drafts; verify names, Scripture references, and quotations against the recording, and never summarize an incomplete transcript as a complete sermon. Do not expose this tool through Express or install its Python dependencies on Render. The transcription tests in `npm test` use Python's standard library and require `python3`, not a model.
 
 ## Deployment
 
@@ -55,6 +58,7 @@ The look draws from the sibling project `src/word` (KRV edition: `styles/theme.c
 - **Shape:** angular and regal, with square-cornered panels, cards, buttons, and active nav items framed by a metal-plated rim; generous whitespace.
 - **Metal plating:** `--gold` (hero, cornerstone, primary buttons, active nav, header/footer rules), `--silver` (cards, panels, secondary buttons, inputs), `--brass-plate` (warm accents such as alerts). Plated components set `--plate`, `--fill`, and `--rim`; the shared frame rule in `public/styles.css` draws the rim. Fills must be opaque (the plate shows through translucent fills). Add new components to that shared selector list rather than using `border-radius`.
 - **Buttons:** one design — square-cornered, gold-plated navy `.btn-primary`; silver-plated `.btn-ghost` for secondary actions. Focus re-plates the control in the focus colour.
+- **Clickable Scripture:** `.scripture-picker > summary` uses the shared silver-plated frame and native disclosure marker; hover/open states re-plate in gold and keyboard focus uses the focus colour. Matching English/Korean parenthetical references are supported; unrecognized or conflicting references remain plain text.
 - All colors are CSS variables in `:root` of `public/styles.css`; don't hard-code new hex values in components.
 - Accessibility: visible focus rings, skip link, sufficient contrast, `prefers-reduced-motion` respected, responsive down to phones, alt text on meaningful images.
 
