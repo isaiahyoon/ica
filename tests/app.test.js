@@ -405,10 +405,10 @@ test('scripture references offer language-specific Bible edition links', async (
   assert.match(html, /<summary class="scripture">John 3:16-18<\/summary>/);
   assert.match(html, /aria-label="Korean or English Bible · 한국어 또는 영어 성경"/);
   assert.match(html, /<p class="scripture">Song of Songs<\/p>/);
-  assert.match(html, /<summary class="scripture">Song of Songs 1:1 \(아가서 1:1\)<\/summary>/);
-  assert.match(html, /<p class="scripture">John 3:16 \(요한복음 3:17\)<\/p>/);
+  assert.match(html, /<summary class="scripture" lang="ko">Song of Songs 1:1 \(아가서 1:1\)<\/summary>/);
+  assert.match(html, /<p class="scripture" lang="ko">John 3:16 \(요한복음 3:17\)<\/p>/);
   const single = await (await fetch(`${base}/sermons/bilingual-reference`)).text();
-  assert.match(single, /<summary class="scripture">Song of Songs 1:1 \(아가서 1:1\)<\/summary>/);
+  assert.match(single, /<summary class="scripture" lang="ko">Song of Songs 1:1 \(아가서 1:1\)<\/summary>/);
   assert.match(single, /href="https:\/\/theamazingword\.org\/kjv\/b\/song-of-solomon\/c\/1\/v\/1"/);
 });
 
@@ -420,6 +420,7 @@ test('clickable Scripture uses plated borders and hover, open, and keyboard-focu
   assert.match(css, /\.scripture-picker > summary:hover,\s*\.scripture-picker > summary:focus-visible,\s*\.scripture-picker\[open\] > summary\s*\{[^}]*--plate:\s*var\(--gold\);[^}]*box-shadow:\s*var\(--shadow\)/s);
   assert.match(css, /\.scripture-picker > summary:focus-visible\s*\{[^}]*--plate:\s*linear-gradient\(var\(--focus\), var\(--focus\)\)/s);
   assert.match(css, /\.sermon p\.scripture\s*\{[^}]*border-left:/s);
+  assert.match(css, /\.sermon h3:lang\(ko\), \.sermon \.scripture:lang\(ko\)\s*\{[^}]*font-family:\s*var\(--serif-ko\)/s);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\*\s*\{[^}]*transition:\s*none !important/s);
 });
 
@@ -552,6 +553,10 @@ test('admin can upload, list and delete sermon audio', async (t) => {
   const renamed = await (await fetch(`${base}/sermons`, { headers: { cookie } })).text();
   assert.match(renamed, /Renamed &lt;b&gt;/);
   assert.match(renamed, /Pastor Kim/);
+  assert.equal((await sedit({ title: '은혜', scripture: '요한복음 3:16' })).status, 302);
+  const koreanSermon = await (await fetch(`${base}/sermons`)).text();
+  assert.match(koreanSermon, /<h3 lang="ko">은혜<\/h3>/);
+  assert.match(koreanSermon, /<summary class="scripture" lang="ko">요한복음 3:16<\/summary>/);
   assert.equal((await sedit({ title: '' })).status, 400);
   assert.equal((await fetch(`${base}/admin/sermons/nope/edit`, { method: 'POST', body: new URLSearchParams({ _csrf: csrf, title: 'x' }), headers: { cookie, origin: base }, redirect: 'manual' })).status, 404);
   assert.equal((await fetch(`${base}/admin/sermons/${sid}/edit`, { method: 'POST', body: new URLSearchParams({ title: 'x' }), headers: { cookie, origin: base }, redirect: 'manual' })).status, 403);
