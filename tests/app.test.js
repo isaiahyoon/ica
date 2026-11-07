@@ -298,6 +298,8 @@ test('sermons can be shared with the native share sheet or copied as a link', as
     description: '', file: 'sermon.mp3', createdAt: new Date().toISOString(),
   }]));
   const html = await (await fetch(`${base}/sermons`)).text();
+  assert.match(html, /<script src="\/scripts\/sermon-sharing\.js" defer><\/script>/);
+  assert.doesNotMatch(html, /<script>([\s\S]*?)<\/script>/);
   assert.match(html, /data-share-title="A sermon"/);
   assert.match(html, /class="btn btn-ghost sermon-action share-link" href="\/sermons\/share-id"/);
   assert.match(html, /class="btn btn-ghost sermon-action copy-link" href="\/sermons\/share-id"/);
@@ -310,8 +312,9 @@ test('sermons can be shared with the native share sheet or copied as a link', as
   assert.match(detailHtml, /<h3>A sermon<\/h3>/);
   assert.doesNotMatch(detailHtml, /class="pagination"/);
   assert.equal((await fetch(`${base}/sermons/missing-sermon`)).status, 404);
-  const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
-  assert.ok(script);
+  const scriptResponse = await fetch(`${base}/scripts/sermon-sharing.js`);
+  assert.equal(scriptResponse.status, 200);
+  const script = await scriptResponse.text();
 
   const createHandler = (navigator) => {
     let handler;
@@ -608,8 +611,37 @@ test('admin can stage audio immediately and publish it with sermon details', asy
   const cookie = await login(base);
   const csrf = await csrfToken(base, cookie);
   const page = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
-  assert.match(page, /\/admin\/sermons\/audio/);
+  assert.match(page, /<script src="\/scripts\/admin\.js" defer><\/script>/);
+  assert.doesNotMatch(page, /<script>([\s\S]*?)<\/script>/);
+  assert.match(page, /id="sermon-upload-form"/);
   assert.match(page, /audio upload progress/i);
+  const adminScript = await fetch(`${base}/scripts/admin.js`);
+  assert.equal(adminScript.status, 200);
+  const adminScriptSource = await adminScript.text();
+  assert.match(adminScriptSource, /\/admin\/sermons\/audio/);
+  assert.match(adminScriptSource, /form\[data-confirm\]/);
+  let submitHandler;
+  let allowSubmission = false;
+  runInNewContext(adminScriptSource, {
+    document: {
+      getElementById: () => null,
+      addEventListener: (_type, handler) => { submitHandler = handler; },
+    },
+    window: { confirm: () => allowSubmission },
+  });
+  let prevented = false;
+  submitHandler({
+    target: { closest: () => ({ dataset: { confirm: 'Remove this sermon?' } }) },
+    preventDefault() { prevented = true; },
+  });
+  assert.equal(prevented, true, 'admin confirmations should prevent submission when declined');
+  allowSubmission = true;
+  prevented = false;
+  submitHandler({
+    target: { closest: () => ({ dataset: { confirm: 'Remove this sermon?' } }) },
+    preventDefault() { prevented = true; },
+  });
+  assert.equal(prevented, false, 'admin confirmations should allow submission when accepted');
 
   const rejected = new FormData();
   rejected.set('_csrf', 'invalid');
