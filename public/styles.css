@@ -237,7 +237,7 @@ nav a:focus-visible { box-shadow: inset 0 0 0 2px var(--brass-soft); }
 .contact-page > .page-head h1 { font-size: clamp(2.15rem, 5vw, 3.25rem); }
 .contact-page > .page-head .lede { margin: .4rem auto 0; font-size: clamp(1.05rem, 2.2vw, 1.25rem); }
 .contact-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(1rem, 2.5vw, 1.5rem); }
-.contact-grid > .panel { padding: clamp(1.25rem, 3vw, 2rem); }
+.contact-grid > .panel { min-width: 0; padding: clamp(1.25rem, 3vw, 2rem); }
 .contact-grid > .panel h2 { margin-bottom: .65em; font-size: clamp(1.4rem, 2.6vw, 1.7rem); }
 .contact-grid > .panel p { margin: .75rem 0 0; }
 .contact-grid > .panel p:first-of-type { margin-top: 0; }
@@ -249,6 +249,7 @@ nav a:focus-visible { box-shadow: inset 0 0 0 2px var(--brass-soft); }
 .contact-grid .contact-address a { display: inline-block; }
 .contact-grid > .panel:last-child { grid-column: 1 / -1; }
 .about-page .contact-grid > .about-intro { grid-column: 1 / -1; }
+.about-page .contact-grid > .ministry-team { grid-column: auto; }
 .about-page #services { scroll-margin-top: 16rem; }
 .contact-grid > .visit-panel {
   grid-column: 1 / -1; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -284,9 +285,13 @@ nav a:focus-visible { box-shadow: inset 0 0 0 2px var(--brass-soft); }
 .visit-map .map-freeway-label { fill: var(--paper); font-size: 17px; }
 .contact-grid > .panel p.visit-parking-note { margin-top: 1.25rem; color: var(--navy); }
 .about-page .people { list-style: none; margin: .25rem 0 1rem; padding: 0; }
-.about-page .people li { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .2rem 1.5rem; padding: .55rem 0; border-bottom: 1px solid var(--line); }
+.about-page .people li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: .2rem 1rem; padding: .55rem 0; border-bottom: 1px solid var(--line); }
 .about-page .people li + li { margin-top: 0; }
+.about-page .person-name, .about-page .person-role, .about-page .people li > a { min-width: 0; overflow-wrap: anywhere; }
 .about-page .person-ko { margin-left: .5em; color: var(--muted); }
+.about-page .person-role { text-align: right; }
+.about-page .person-role .bilingual { display: flex; max-width: 100%; align-items: flex-end; }
+.about-page .people li > a { max-width: 100%; text-align: right; }
 .about-page h3 { margin: 1.25rem 0 .25rem; }
 .contact-page > .contact-scripture { margin-top: clamp(1.5rem, 3vw, 2.25rem); }
 @media (max-width: 680px) {
@@ -296,6 +301,10 @@ nav a:focus-visible { box-shadow: inset 0 0 0 2px var(--brass-soft); }
   .visit-panel .contact-section { text-align: center; }
   .contact-scripture { flex-direction: column; text-align: center; }
   .contact-scripture cite .bilingual { justify-content: center; }
+}
+@media (max-width: 420px) {
+  .about-page .ministry-team .people li { grid-template-columns: minmax(0, 1fr); }
+  .about-page .ministry-team .person-role { justify-self: end; }
 }
 
 .page-head {
