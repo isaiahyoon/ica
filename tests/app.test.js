@@ -499,6 +499,65 @@ test('admin can upload, list and delete sermon audio', async (t) => {
   assert.equal((await fetch(base + src)).status, 404);
 });
 
+test('admin can stage audio immediately and publish it with sermon details', async (t) => {
+  const { base, uploadDir, close } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const csrf = await csrfToken(base, cookie);
+  const page = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
+  assert.match(page, /\/admin\/sermons\/audio/);
+  assert.match(page, /audio upload progress/i);
+
+  const rejected = new FormData();
+  rejected.set('_csrf', 'invalid');
+  rejected.set('audio', new Blob(['private'], { type: 'audio/mpeg' }), 'private.mp3');
+  const denied = await fetch(`${base}/admin/sermons/audio`, {
+    method: 'POST', body: rejected, headers: { cookie, origin: base },
+  });
+  assert.equal(denied.status, 403);
+  assert.deepEqual(await fs.readdir(path.join(uploadDir, 'staging')), []);
+
+  const audio = new FormData();
+  audio.set('_csrf', csrf);
+  audio.set('audio', new Blob(['sermon audio'], { type: 'audio/mpeg' }), 'sermon.mp3');
+  const stagedResponse = await fetch(`${base}/admin/sermons/audio`, {
+    method: 'POST', body: audio, headers: { cookie, origin: base },
+  });
+  assert.equal(stagedResponse.status, 201);
+  const { uploadId } = await stagedResponse.json();
+  assert.match(uploadId, /^[0-9a-f-]{36}\.mp3$/);
+  assert.equal((await fetch(`${base}/uploads/audio/${uploadId}`)).status, 404);
+  assert.deepEqual(await fs.readdir(path.join(uploadDir, 'audio')), []);
+
+  const otherCookie = await login(base);
+  const otherCsrf = await csrfToken(base, otherCookie);
+  const otherPublish = new FormData();
+  otherPublish.set('_csrf', otherCsrf);
+  otherPublish.set('stagedAudio', uploadId);
+  otherPublish.set('title', 'Unauthorized publish');
+  const otherResult = await fetch(`${base}/admin/sermons`, {
+    method: 'POST', body: otherPublish, headers: { cookie: otherCookie, origin: base }, redirect: 'manual',
+  });
+  assert.equal(otherResult.status, 400);
+  assert.deepEqual(await fs.readdir(path.join(uploadDir, 'staging')), [uploadId]);
+
+  const publish = new FormData();
+  publish.set('_csrf', csrf);
+  publish.set('stagedAudio', uploadId);
+  publish.set('title', 'Song of Songs');
+  publish.set('speaker', 'Pastor');
+  publish.set('scripture', 'Song of Songs');
+  const result = await fetch(`${base}/admin/sermons`, {
+    method: 'POST', body: publish, headers: { cookie, origin: base }, redirect: 'manual',
+  });
+  assert.equal(result.status, 302);
+  assert.deepEqual(await fs.readdir(path.join(uploadDir, 'staging')), []);
+  assert.deepEqual(await fs.readdir(path.join(uploadDir, 'audio')), [uploadId]);
+  const sermons = await (await fetch(`${base}/sermons`)).text();
+  assert.match(sermons, /Song of Songs/);
+  assert.match(sermons, /Pastor/);
+});
+
 test('sermons paginate at 10', async (t) => {
   const { base, dataDir, close } = await boot();
   t.after(close);

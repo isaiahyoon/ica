@@ -17,7 +17,8 @@ const AUDIO = { exts: ['.mp3', '.m4a', '.aac', '.wav', '.ogg'], max: 200 * 1024 
 function uploader(dir, { exts, max }, mimePrefix, files) {
   return multer({
     storage: multer.diskStorage({
-      destination: dir,
+      destination: (_req, _file, cb) =>
+        fs.mkdir(dir, { recursive: true }).then(() => cb(null, dir), cb),
       filename: (_req, file, cb) =>
         cb(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`),
     }),
@@ -50,6 +51,9 @@ export function createApp({
   }
   const store = createStore(dataDir);
   const audioDir = path.join(uploadDir, 'audio');
+  const stagingDir = path.join(uploadDir, 'staging');
+  const stagedUploads = new Map();
+  const stagedUploadMaxAge = 60 * 60 * 1000;
   const pub = path.join(root, 'public');
   const loginLimiter = auth.createLoginLimiter();
   const admins = createAdmins(store, password);
@@ -159,22 +163,102 @@ export function createApp({
       .catch(next);
   };
 
+  const expireStagedUploads = async () => {
+    const now = Date.now();
+    for (const [filename, staged] of stagedUploads) {
+      if (staged.expiresAt <= now) {
+        stagedUploads.delete(filename);
+        await removeFiles(stagingDir, [filename]);
+      }
+    }
+
+    let entries;
+    try {
+      entries = await fs.readdir(stagingDir, { withFileTypes: true });
+    } catch (err) {
+      if (err.code === 'ENOENT') return;
+      throw err;
+    }
+    const active = new Set(stagedUploads.keys());
+    for (const entry of entries) {
+      if (!entry.isFile() || active.has(entry.name)) continue;
+      const details = await fs.stat(path.join(stagingDir, entry.name));
+      if (now - details.mtimeMs >= stagedUploadMaxAge) {
+        await removeFiles(stagingDir, [entry.name]);
+      }
+    }
+  };
+
+  app.post('/admin/sermons/audio', auth.requireAdmin, auth.requireSameOrigin,
+    (req, res, next) => uploader(stagingDir, AUDIO, 'audio/', 1).single('audio')(req, res, (err) => {
+      if (!err) return next();
+      const text = err.code === 'LIMIT_FILE_SIZE' ? 'That file is too large.'
+        : err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE' ? 'Too many files.'
+        : err.message;
+      res.status(400).json({ error: text });
+    }),
+    (req, res, next) => {
+      (async () => {
+        if (!auth.verifyCsrf(req, req.body?._csrf)) {
+          if (req.file) await removeFiles(stagingDir, [req.file.filename]);
+          return res.status(403).json({ error: 'Request could not be verified. Reload the page and try again.' });
+        }
+        if (!req.file) return res.status(400).json({ error: 'Choose an audio file.' });
+
+        await expireStagedUploads();
+        const sessionId = auth.sessionInfo(req)?.id;
+        for (const [filename, staged] of stagedUploads) {
+          if (staged.sessionId === sessionId) {
+            stagedUploads.delete(filename);
+            await removeFiles(stagingDir, [filename]);
+          }
+        }
+        stagedUploads.set(req.file.filename, {
+          sessionId,
+          expiresAt: Date.now() + stagedUploadMaxAge,
+        });
+        res.status(201).json({ uploadId: req.file.filename });
+      })().catch(next);
+    });
+
+  const stagedCleanup = setInterval(() => {
+    expireStagedUploads().catch((err) => console.error(err));
+  }, 60 * 1000);
+  stagedCleanup.unref();
+  expireStagedUploads().catch((err) => console.error(err));
+
   app.post('/admin/sermons', auth.requireAdmin,
     auth.requireSameOrigin,
     handleUpload(uploader(audioDir, AUDIO, 'audio/', 1).single('audio')),
     csrfAfterUpload(audioDir),
     async (req, res) => {
       const title = clean(req.body.title, 140);
-      if (!req.file || !title) {
+      if (!title) {
         if (req.file) await removeFiles(audioDir, [req.file.filename]);
-        return adminView(req, res, 400, { error: 'A title and an audio file are required.' });
+        return adminView(req, res, 400, { error: 'A title is required.' });
       }
+      let filename = req.file?.filename;
+      if (!filename && typeof req.body.stagedAudio === 'string') {
+        const staged = stagedUploads.get(req.body.stagedAudio);
+        const sessionId = auth.sessionInfo(req)?.id;
+        if (!staged || staged.sessionId !== sessionId || staged.expiresAt <= Date.now()) {
+          if (staged && staged.expiresAt <= Date.now()) {
+            stagedUploads.delete(req.body.stagedAudio);
+            await removeFiles(stagingDir, [req.body.stagedAudio]);
+          }
+          return adminView(req, res, 400, { error: 'The audio upload expired. Please select it again.' });
+        }
+        filename = req.body.stagedAudio;
+        await fs.rename(path.join(stagingDir, filename), path.join(audioDir, filename));
+        stagedUploads.delete(filename);
+      }
+      if (!filename) return adminView(req, res, 400, { error: 'An audio file is required.' });
       const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date ?? '') ? req.body.date : '';
       await store.update('sermons', (list) => [...list, {
         id: crypto.randomUUID(), title, date,
         speaker: clean(req.body.speaker, 100), scripture: clean(req.body.scripture, 100),
         description: clean(req.body.description, 1000),
-        file: req.file.filename, createdAt: new Date().toISOString(),
+        file: filename, createdAt: new Date().toISOString(),
       }]);
       res.redirect('/admin?notice=' + encodeURIComponent('Sermon uploaded.'));
     });
