@@ -212,8 +212,15 @@ nav a:focus-visible { box-shadow: inset 0 0 0 2px var(--brass-soft); }
 .scripture-picker > summary:focus-visible { --plate: linear-gradient(var(--focus), var(--focus)); }
 .hero-verse .scripture-picker > summary, .cornerstone .scripture-picker > summary, .site-footer .scripture-picker > summary { margin-inline: auto; }
 .scripture-picker cite { color: var(--deep-teal); }
-.sermon .scripture-picker { margin: 0 0 .75rem; }
-.sermon .scripture-picker > summary { margin: 0; }
+.sermon .scripture-picker { margin: 0 0 .5rem; }
+.sermon .scripture-picker > summary {
+  display: block; width: fit-content; margin: 0; padding: .15rem .8rem;
+  background: none; border-left: 2px solid var(--brass-soft); color: var(--deep-teal);
+  box-shadow: none;
+}
+.sermon .scripture-picker > summary::before { content: none; }
+.sermon .scripture-picker > summary:hover, .sermon .scripture-picker[open] > summary { text-decoration: underline; text-underline-offset: 3px; }
+.sermon .scripture-picker > summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .scripture-language-links { display: flex; flex-wrap: wrap; gap: .35rem .8rem; margin: .4rem 0 .75rem; font: .9rem/1.5 var(--sans); }
 .scripture-language-links a { color: var(--deep-teal); text-decoration: underline; text-underline-offset: 3px; }
 .contact-scripture { display: flex; align-items: center; justify-content: center; gap: clamp(1.25rem, 4vw, 2.5rem); margin-top: 1.75rem; text-align: left; }
@@ -340,7 +347,7 @@ a.page-num:hover, a.page-step:hover { background: var(--navy); color: #fff; bord
 .sermon, .panel { --plate: var(--silver); --fill: linear-gradient(160deg, #fff, var(--paper) 60%, var(--blue)); --rim: 3px; padding: 1.5rem; }
 .sermon:nth-child(3n+2) { --fill: linear-gradient(160deg, #fff, var(--paper) 55%, var(--lavender)); }
 .sermon:nth-child(3n+3) { --fill: linear-gradient(160deg, #fff, var(--paper) 55%, var(--pink)); }
-.sermon { padding: 1.75rem 1.75rem 1.5rem 2.25rem; }
+.sermon { padding: 1.4rem 1.75rem 1.2rem 2.25rem; }
 .sermon::after {
   content: ""; position: absolute; z-index: 0; pointer-events: none;
   left: var(--rim); top: var(--rim); bottom: var(--rim); width: .5rem; background: var(--gold);
@@ -350,8 +357,18 @@ a.page-num:hover, a.page-step:hover { background: var(--navy); color: #fff; bord
 .sermon-head { padding-bottom: .75rem; margin-bottom: .9rem; border-bottom: 1px solid rgba(169, 124, 53, .35); }
 .sermon h3 { margin: 0 0 .3em; font-size: 1.5rem; line-height: 1.2; color: var(--navy); }
 .sermon .meta { margin: 0; font: 400 .8rem var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--brass); }
-.sermon p.scripture { display: inline-block; padding: .15rem .8rem; margin: 0 0 .75rem; font-style: normal; border-left: 2px solid var(--brass-soft); }
-.sermon audio { margin-top: .75rem; border-radius: 2rem; }
+.sermon-meta-line { display: block; }
+.sermon-meta-line + .sermon-meta-line { margin-top: .4em; }
+.sermon h3, .sermon .meta span, .sermon .scripture, .sermon-description p { white-space: pre-line; overflow-wrap: anywhere; }
+.sermon p.scripture { display: inline-block; padding: .15rem .8rem; margin: 0 0 .5rem; font-style: normal; border-left: 2px solid var(--brass-soft); }
+.sermon-description { margin: .15rem 0 .4rem; }
+.sermon-description summary { display: list-item; list-style-position: inside; width: fit-content; color: var(--deep-teal); font: 400 .9rem var(--sans); cursor: pointer; }
+.sermon-description summary::marker { color: var(--brass); }
+.sermon-description summary .bilingual { display: inline-flex; flex-direction: row; flex-wrap: wrap; gap: .25em .6em; margin-left: .45em; }
+.sermon-description summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+.sermon-description summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.sermon-description p { margin: .75rem 0 0; }
+.sermon audio { margin-top: .4rem; border-radius: 2rem; }
 .sermon-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
 .sermon-action { font-size: .85rem; letter-spacing: .04em; }
 .sermon-action .bilingual { flex-direction: row; flex-wrap: wrap; gap: .25em .6em; align-items: baseline; }
@@ -387,15 +404,15 @@ audio { width: 100%; margin-top: .5rem; }
 .form[hidden] { display: none; }
 label { display: grid; gap: .55rem; font-weight: 400; color: var(--navy); font-size: .95rem; }
 label small { font-weight: 400; color: var(--muted); }
-input, textarea { font: 400 1rem var(--sans); padding: .65rem .8rem; border: 2px solid; border-image: var(--silver) 1; background: #fff; color: var(--text); width: 100%; }
-input:lang(ko), textarea:lang(ko) { font-family: var(--sans-ko); }
-input:focus, textarea:focus { outline: 3px solid rgba(63,127,166,.3); border-image: var(--gold) 1; }
+input, textarea, select { font: 400 1rem var(--sans); padding: .65rem .8rem; border: 2px solid; border-image: var(--silver) 1; background: #fff; color: var(--text); width: 100%; }
+input:lang(ko), textarea:lang(ko), select:lang(ko) { font-family: var(--sans-ko); }
+input:focus, textarea:focus, select:focus { outline: 3px solid rgba(63,127,166,.3); border-image: var(--gold) 1; }
 .admin-grid .form { gap: .85rem; }
 .admin-grid .form label { gap: .3rem; line-height: 1.35; }
 .admin-grid .form label .bilingual { gap: .12em; line-height: 1.2; }
 .admin-grid .form label small { font-size: .82rem; line-height: 1.45; }
-.admin-grid .form input:not([type="file"]), .admin-grid .form textarea { min-height: 2.9rem; }
-.admin-grid .form textarea { min-height: 6rem; }
+.admin-grid .form input:not([type="file"]), .admin-grid .form textarea, .admin-grid .form select { min-height: 2.9rem; }
+.admin-grid .form textarea[name="description"] { min-height: 6rem; }
 .admin-grid .form input[type="file"] { min-width: 0; padding: .55rem .65rem; background: var(--paper); }
 .admin-grid .count { margin-top: 1.1rem; padding-top: .8rem; border-top: 1px solid var(--line); }
 .count { margin: 1rem 0 0; color: var(--muted); font-size: .9rem; }
