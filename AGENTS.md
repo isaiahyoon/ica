@@ -36,7 +36,7 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 - `/sermons` — public audio list and individual sermon pages; recognized Scripture references open an accessible menu with English KJV and Korean KRV links to that passage.
 - `/contact` — public contact page with the church address, Google Maps link, bilingual SVG location diagram (parking directly behind the building's south side), visitor information, and Instagram page, with a link to worship times on About. The 1 Corinthians 13:12 verse beside the church logo at the bottom opens a menu with English KJV and Korean KRV links. Linked from the Connect card on `/`.
 - `/font-study.html` — standalone English and Korean typeface specimen.
-- `/admin` — two-step sign-in required (`/admin/login` → `/admin/verify` or first-time `/admin/setup`); upload/delete sermon audio; the owner (holder of `ADMIN_PASSWORD`) manages other admins.
+- `/admin` — two-step sign-in required (`/admin/login` → `/admin/verify` or first-time `/admin/setup`); upload, replace, and delete sermon audio; replacing audio preserves sermon metadata and its link; the owner (holder of `ADMIN_PASSWORD`) manages other admins.
 
 ## Running locally
 
@@ -53,7 +53,7 @@ For local sermon transcription, run `npm run transcribe:setup` once on an Apple 
 - Admin-only routes must use `auth.requireAdmin`; state-changing admin routes must also enforce same-origin and CSRF checks.
 - Production requires `ADMIN_SESSION_SECRET` (at least 32 bytes), HTTPS, and a unique `ADMIN_PASSWORD` of at least 16 non-whitespace characters. Session and rate-limit state are single-process only; use shared stores before horizontal scaling.
 - Audio uploads are whitelisted by extension **and** MIME prefix, size-limited, and stored under unique generated (UUID) names (never the user's filename).
-- Admin audio uploads are staged privately on file selection and published only with submitted sermon details; abandoned staged files expire after one hour.
+- Admin audio uploads are staged privately on file selection and published only with submitted sermon details; audio replacements preserve existing sermon metadata and links; abandoned staged files expire after one hour.
 - Never commit `data/`, `uploads/`, or secrets.
 
 # Design System

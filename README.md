@@ -12,7 +12,7 @@ Public website: [immanuelchurchofamerica.org](https://immanuelchurchofamerica.or
 - **Clickable Scripture** — silver-plated borders and a disclosure marker identify passage menus across the site; hover and expanded states use gold plating, with visible keyboard-focus feedback and reduced-motion support. Unrecognized or conflicting references remain plain text.
 - **Link previews** — absolute, bilingual Open Graph and Twitter Card metadata with a custom 1200×630 preview image; the canonical URL is set for each page.
 - **Contact** (`/contact`) — address with a Google Maps link, a bilingual location diagram showing the parking lot directly behind the building's south side, visitor details, and Instagram, with a link to worship times on About; includes a clickable 1 Corinthians 13:12 verse beside the church logo, with English KJV and Korean KRV links, and is linked from the welcome page.
-- **Admin** (`/admin`) — two-step sign-in (password, then authenticator code) for upload and removal of sermon audio; audio starts uploading as soon as it is selected, while sermon details can be entered; the owner can add, reset, and remove other admins.
+- **Admin** (`/admin`) — two-step sign-in (password, then authenticator code) for uploading, replacing, and removing sermon audio; replacement keeps the existing sermon details and link; audio starts uploading as soon as it is selected, while sermon details can be entered for new sermons; the owner can add, reset, and remove other admins.
 - **Font study** (`/font-study.html`) — English and Korean typeface specimens with a live four-font serif/sans pairing preview.
 
 ## Code layout
@@ -83,7 +83,7 @@ To create a new Render service, create a Blueprint in Render from this repositor
 
 The app also supports `ICA_DATA_DIR` and `ICA_UPLOAD_DIR` for persistent storage on other hosts. Both directories should be on persistent storage, not an ephemeral deploy filesystem.
 
-Audio selected in the admin form uploads to a private staging directory first. It is published with the sermon details only after the form is submitted, and abandoned staged uploads are removed after one hour.
+Audio selected in the admin form uploads to a private staging directory first. New audio is published with its sermon details only after the form is submitted; replacing audio keeps the existing sermon details and link. Abandoned staged uploads are removed after one hour.
 
 ## Data
 
