@@ -55,10 +55,14 @@ export async function generatePosts(entries, outputRoot) {
       caption: postCaption(entry.description), hashtags: postHashtags(entry.hashtags) };
   });
   await fs.mkdir(outputRoot, { recursive: true });
+  const existingImages = (await fs.readdir(outputRoot)).filter((file) => file.endsWith('.jpg')).length;
   const results = [];
   try {
     for (const [index, post] of posts.entries()) {
-      const image = await renderInstagramPost(post, { seed: `${crypto.randomUUID()}:${index}` });
+      const image = await renderInstagramPost(post, {
+        seed: `${crypto.randomUUID()}:${index}`, designIndex: existingImages + index,
+        backgroundPath: post.backgroundPath,
+      });
       const file = await writePost(outputRoot, post.stem, image);
       results.push({ url: post.url, file, caption: post.caption, hashtags: post.hashtags });
     }

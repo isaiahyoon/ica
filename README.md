@@ -37,7 +37,19 @@ Other commands: `npm run dev` (auto-restart), `npm test`, `npm run reset-owner-2
 
 ## Instagram sermon slides
 
-Slide footers read **Since 1996 · 1996년부터** instead of a listening invitation. This Instagram-specific text does not change the website header's existing year.
+Different sermons use visibly different compositions, not just changed gradients: the renderer rotates flowing silk, vaulted arches, angular corner fans, and oval medallions by existing image count and batch order, with seeded variations. The assistant must compare the set visually before delivery, especially for batches larger than four. Automated checks compare same-seed compositions to ensure their geometry differs substantially.
+
+The art-direction quality target is richer than those geometry checks: the owner's navy-covering reference calls for textured, sculptural midnight-blue folds, luminous interwoven pastel silk, believable depth and lighting, and metallic-gold edges and glints within the artwork. Flat pastel triangles, concentric bands, and generic borders are not an acceptable substitute. This is a visual quality requirement, not a claim that the current procedural renderer already achieves the reference's material richness.
+
+For separately approved reference-inspired image generation, include an optional `backgroundPath` (absolute local image path) in each JSON entry. The renderer fits that artwork to the portrait and overlays exact English/Korean text locally instead of adding procedural decorations. Use different artwork for each sermon and inspect the finished slide. The renderer never calls an image service itself; separately generating backgrounds may consume credits and needs approval.
+
+Artwork overlays balance title lines, render Korean companion text at a smaller size with deliberate language separation, and space Scripture and names by their measured heights. Section gaps are at least 60 logical pixels, greater than language gaps. The redundant speaker label is omitted; dense metadata is rejected. The understated bilingual founding-year footer sits at the bottom and may overlap ribbons.
+
+All Instagram lettering uses the restrained ivory `--paper` token and shares the canvas centerline, with no individually offset groups. The text presentation is solemn and stately; pastel and metallic colors belong to the artwork, not the lettering. This applies to both procedural slides and supplied artwork.
+
+For older viewers, both rendering paths share enlarged secondary sermon metadata (at least 64 exported pixels), lightly reinforced regular serif strokes, and comfortable line/language spacing. The quiet bottom footer uses smaller 52/48 exported-pixel lettering. Dense metadata is rejected instead of being reduced below the reading minimum. Inspect the finished slides at phone size as well as full resolution.
+
+Slide footers read **Since 1994 · 1994년부터** instead of a listening invitation, matching the church founding year displayed on the website.
 
 Ask the assistant: “Create Instagram posts for these sermon links: …” The repository's `instagram-post` skill verifies the linked metadata, creates **one 2160×2700 portrait JPG per link**, and returns each image, a caption, and five hashtags. The caption is the saved **Sermon Overview** verbatim, with a blank line between English and Korean, followed by “Listen to the sermon via the link in our bio.” and “프로필 링크를 통해 설교를 들으실 수 있습니다.” on separate lines. No paraphrasing or invented translations; a missing overview stops generation. Captions appear above the hashtags. The first two hashtags are always `#ImmanuelChurchOfAmerica` and `#미주임마누엘교회`; the remaining three are relevant to the sermon title and/or Scripture.
 

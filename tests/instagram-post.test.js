@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
-import { postBackground, postCaption, postDetails, postHashtags, renderInstagramPost, sermonLink } from '../lib/instagram-post.js';
+import { instagramArtworkTextLayers, postBackground, postCaption, postDetails, postHashtags, renderInstagramPost, sermonLink } from '../lib/instagram-post.js';
 import { generatePosts, postFileStem, run } from '../scripts/render-instagram-post.js';
 import { textLayer } from '../lib/sermon-preview.js';
 
@@ -113,9 +113,29 @@ test('gradient compositions vary across generated seeds and use only supplied de
     assert.match(svg, /width="1080" height="1350"/);
     assert.ok(!svg.includes('undefined'));
     for (const accent of ['pink', 'lavender', 'yellow']) {
-      assert.ok(svg.includes(`fill="${palette[accent]}"`), `${accent} must be visible ribbon artwork, not just a gradient stop`);
+      assert.ok(svg.includes(`fill="${palette[accent]}"`) || svg.includes(`stroke="${palette[accent]}"`),
+        `${accent} must be visible artwork, not just a gradient stop`);
     }
     for (const color of svg.match(/#[a-f\d]{6}/gi)) assert.ok(Object.values(palette).includes(color));
+  }
+});
+
+test('composition families differ visibly even with identical colors, seed, and sermon text', async () => {
+  const css = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  const colors = Object.fromEntries([...css.matchAll(/--([\w-]+):\s*(#[a-f\d]{6})/gi)]
+    .map((match) => [match[1], match[2]]));
+  const images = await Promise.all([0, 1, 2, 3].map((designIndex) =>
+    sharp(Buffer.from(postBackground(colors, 'same-seed', designIndex)))
+      .resize(270, 338).removeAlpha().raw().toBuffer()));
+  for (let a = 0; a < images.length; a += 1) {
+    for (let b = a + 1; b < images.length; b += 1) {
+      let changed = 0;
+      for (let i = 0; i < images[a].length; i += 3) {
+        if (Math.max(...[0, 1, 2].map((channel) =>
+          Math.abs(images[a][i + channel] - images[b][i + channel]))) > 30) changed += 1;
+      }
+      assert.ok(changed / (270 * 338) > .12, `designs ${a} and ${b} must differ across at least 12% of the artwork`);
+    }
   }
 });
 
@@ -151,32 +171,33 @@ test('renderer produces high-resolution portrait JPEGs with safe bilingual text 
   assert.equal(info.width, 2160);
   assert.equal(info.height, 2700);
   assert.equal((await sharp(second).metadata()).width, 2160);
-  const footer = await textLayer('Since 1996 · 1996년부터', 44, 1680, 96, '#fbfdfe',
-    { minRenderedSize: 44, bilingualFonts: true });
-  const footerInfo = await sharp(footer).metadata();
-  const background = await sharp(first).extract({
-    left: 0, top: 2464, width: 2160, height: 96,
-  }).png().toBuffer();
-  const expectedFooter = await sharp(background).composite([{
-    input: footer, left: Math.round((2160 - footerInfo.width) / 2),
-    top: Math.round((96 - footerInfo.height) / 2),
-  }]).removeAlpha().raw().toBuffer();
-  const renderedFooter = await sharp(first).extract({
-    left: 0, top: 2464, width: 2160, height: 96,
-  }).raw().toBuffer();
-  assert.equal(expectedFooter.length, renderedFooter.length);
-  const meanDifference = renderedFooter.reduce((sum, value, index) =>
-    sum + Math.abs(value - expectedFooter[index]), 0) / renderedFooter.length;
-  assert.ok(meanDifference < 1, `footer must contain the bilingual year text (difference ${meanDifference})`);
-  for (const [field, value, top, height] of [
-    ['service', 'Sunday 1st Service 주일 1부 예배', 520, 140],
-    ['service', '', 520, 140],
-    ['title', 'Hope\n소망', 820, 600],
-    ['scripture', 'John 3:16\n요한복음 3:16', 1530, 310],
-    ['speakerEn', 'Another saved speaker', 2020, 250],
+  const layers = await instagramArtworkTextLayers(sermon, { paper: '#fbfdfe' });
+  const footer = layers.at(-2);
+  const region = { left: footer.left, top: footer.top, width: footer.width, height: footer.height };
+  const expectedFooter = await sharp(footer.input).ensureAlpha().raw().toBuffer();
+  const renderedFooter = await sharp(first).extract(region).removeAlpha().raw().toBuffer();
+  let inkPixels = 0;
+  let difference = 0;
+  for (let pixel = 0; pixel < expectedFooter.length / 4; pixel += 1) {
+    if (expectedFooter[pixel * 4 + 3] !== 255) continue;
+    inkPixels += 1;
+    for (let channel = 0; channel < 3; channel += 1) {
+      difference += Math.abs(renderedFooter[pixel * 3 + channel] - expectedFooter[pixel * 4 + channel]);
+    }
+  }
+  assert.ok(inkPixels > 0);
+  assert.ok(difference / (inkPixels * 3) < 5, 'rendered footer must contain the expected ivory lettering');
+  for (const [field, value, text] of [
+    ['service', 'Sunday 1st Service 주일 1부 예배', 'Sunday 2nd Service'],
+    ['service', '', 'Sunday 2nd Service'],
+    ['title', 'Hope\n소망', 'The Path of the Grain of Wheat'],
+    ['scripture', 'John 3:16\n요한복음 3:16', '2 Timothy 1:8-12, 16-18'],
+    ['speakerEn', 'Another saved speaker', 'Pastor John Yoon'],
   ]) {
     const changed = await renderInstagramPost({ ...sermon, [field]: value }, { seed: 'first' });
-    const region = { left: 160, top, width: 1840, height };
+    const layer = layers.find((layer) => layer.text === text);
+    assert.ok(layer, `missing ${field} layer`);
+    const region = { left: layer.left, top: layer.top, width: layer.width, height: layer.height };
     assert.notDeepEqual(await sharp(first).extract(region).raw().toBuffer(),
       await sharp(changed).extract(region).raw().toBuffer(), `${field} must change pixels in its own region`);
   }
@@ -192,6 +213,84 @@ test('filenames use the saved sermon date and safe service label', () => {
     assert.throws(() => postFileStem({ ...sermon, date }), /valid YYYY-MM-DD/);
   }
   assert.throws(() => postFileStem({ ...sermon, service: '!!!' }), /letters or numbers/);
+});
+
+test('local background artwork is used beneath exact text and invalid paths fail explicitly', async (t) => {
+  const directory = await temporary(t);
+  const backgroundPath = path.join(directory, 'artwork.png');
+  await sharp({ create: { width: 1080, height: 1350, channels: 3, background: '#03112c' } })
+    .png().toFile(backgroundPath);
+  const results = await generatePosts([{ ...sermon, backgroundPath }], directory);
+  const { data } = await sharp(results[0].file).extract({ left: 0, top: 0, width: 20, height: 20 })
+    .raw().toBuffer({ resolveWithObject: true });
+  assert.ok(Math.abs(data[0] - 3) < 3 && Math.abs(data[1] - 17) < 3 && Math.abs(data[2] - 44) < 3);
+  assert.equal((await sharp(results[0].file).metadata()).height, 2700);
+  await assert.rejects(renderInstagramPost(sermon, { backgroundPath: '' }), /local image path/);
+  await assert.rejects(renderInstagramPost(sermon, { backgroundPath: path.join(directory, 'missing.png') }), /missing/);
+});
+
+test('artwork typography separates languages and uses measured, non-overlapping groups', async () => {
+  const c = { paper: '#fbfdfe', sky: '#bed8ea', 'brass-soft': '#dfc681' };
+  for (const title of [sermon.title,
+    'A Gospel Without Shame, Mercy on the Day of Judgment\n부끄러움없는 복음, 심판날의 긍휼',
+    'Hope\n소망']) {
+    const layers = await instagramArtworkTextLayers({ ...sermon, title }, c);
+    for (let index = 0; index < layers.length; index += 1) {
+      const layer = layers[index];
+      const footer = index >= layers.length - 2;
+      if (!footer) assert.ok(layer.height >= 44, 'secondary metadata must remain large enough for phone reading');
+      assert.ok(layer.left >= 0 && layer.left + layer.width <= 2160);
+      assert.ok(Math.abs(layer.left + layer.width / 2 - 1080) <= .5,
+        'every text row must share the canvas centerline');
+      const pixels = await sharp(layer.input).ensureAlpha().raw().toBuffer();
+      const color = c.paper.match(/[a-f\d]{2}/gi).map((channel) => parseInt(channel, 16));
+      let opaque = 0;
+      for (let pixel = 0; pixel < pixels.length; pixel += 4) {
+        if (pixels[pixel + 3] !== 255) continue;
+        opaque += 1;
+        assert.deepEqual([...pixels.subarray(pixel, pixel + 3)], color,
+          'all lettering must use the same restrained ivory token');
+      }
+      assert.ok(opaque > 0, 'the color check must include visible lettering');
+      assert.ok(layer.top + layer.height <= (footer ? 2580 : 2200),
+        'metadata must stay above the bottom artwork; the footer may overlap ribbons');
+      if (index) {
+        const previous = layers[index - 1];
+        assert.ok(layer.top - previous.top - previous.height >= 20, 'rows need at least 10 logical pixels of breathing room');
+      }
+    }
+    assert.ok(!layers.some(({ text }) => text.includes('Speaker ·')));
+    assert.equal(layers.at(-2).text, 'Since 1994');
+    assert.equal(layers.at(-1).text, '1994년부터');
+    assert.equal(layers.at(-1).top + layers.at(-1).height, 2580, 'footer must end 60 logical pixels above the bottom');
+    assert.ok(layers.at(-2).height < layers.find(({ text }) => text === 'Pastor John Yoon').height,
+      'founding year must be understated relative to sermon metadata');
+    for (const text of ['2 Timothy 1:8-12, 16-18', 'Pastor John Yoon']) {
+      const index = layers.findIndex((layer) => layer.text === text);
+      const previous = layers[index - 1];
+      assert.ok(layers[index].top - previous.top - previous.height >= 120,
+        'separate sections need at least 60 logical pixels, more than language gaps');
+    }
+    const english = layers.find(({ text }) => text === 'Pastor John Yoon');
+    const korean = layers.find(({ text }) => text === '윤태선 목사');
+    assert.ok(korean.height < english.height * 1.3, 'Korean companion text must not dominate its English line');
+  }
+  await assert.rejects(instagramArtworkTextLayers({ ...sermon, title: Array(60).fill('A').join('\n') }, c), /too dense/);
+});
+
+test('Instagram stroke reinforcement improves thin serif visibility without changing preview defaults', async () => {
+  const regular = await textLayer('Since 1994', 68, 1200, 130, '#fbfdfe');
+  const explicit = await textLayer('Since 1994', 68, 1200, 130, '#fbfdfe', { strokeWidth: 0 });
+  assert.deepEqual(regular, explicit);
+  const reinforced = await textLayer('Since 1994', 68, 1200, 130, '#fbfdfe', { strokeWidth: 1.2 });
+  const coverage = async (input) => {
+    const pixels = await sharp(input).ensureAlpha().raw().toBuffer();
+    let sum = 0;
+    for (let i = 3; i < pixels.length; i += 4) sum += pixels[i];
+    return sum;
+  };
+  assert.ok(await coverage(reinforced) > await coverage(regular) * 1.15,
+    'reinforced strokes must measurably increase visible ink coverage');
 });
 
 test('batches create flat date-service filenames in order and preserve earlier renders', async (t) => {
