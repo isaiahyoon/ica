@@ -8,6 +8,7 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 
 - `server.js` — `createApp()` factory and routes (public pages, admin login, staged sermon uploads, deletes).
 - `lib/render.js` — all HTML templates. Always escape user content with `esc()`.
+- `lib/sermon-preview.js` — dynamic 1200×630 sermon preview PNGs with title, Bible reference, and optional service label blended into the original artwork; Sharp/Resvg, shared CSS colors, bundled regular serif fonts in `assets/fonts/`, and a bounded cache. All three fields version the image URL.
 - `lib/auth.js` — admin password validation, revocable HttpOnly session cookie (pending vs. full stages), CSRF tokens, and bounded login throttling.
 - `lib/admins.js`, `lib/admin-routes.js`, `lib/totp.js` — two-step admin sign-in (password then TOTP/recovery code, no usernames), per-admin passwords and owner-managed admins; `scripts/reset-owner-2fa.js` clears the owner's authenticator.
 - `lib/store.js` — JSON-file store in `data/` (git-ignored). Uploaded files live in `uploads/` (git-ignored).
@@ -33,10 +34,10 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 
 - `/` — Information page (the landing page); displayed Scripture opens an accessible menu with English KJV and Korean KRV links to that passage. Never invent service times, addresses, or doctrine.
 - `/about` — public About page: family church, worship services and times, worship style, preaching, creed and Lord's Prayer, and leadership (senior pastor and elders with phone links). Content comes from the owner; never invent details.
-- `/sermons` — public audio list and individual sermon pages; recognized Scripture references open an accessible menu with English KJV and Korean KRV links to that passage.
+- `/sermons` — public audio list and individual sermon pages with optional service information, expandable descriptions, and multiline text; recognized Scripture references open an accessible menu with English KJV and Korean KRV links, including matching `//` references and separate links for split verse ranges. `/sermons/:id/preview.png` embeds the title and saved Bible reference in a dynamic image, never verse text or the sermon description; versioned image URLs change with those fields. Without a reference, the image shows the title and church branding, and metadata offers a bilingual listening invitation.
 - `/contact` — public contact page with the church address, Google Maps link, bilingual SVG location diagram (parking directly behind the building's south side), visitor information, and Instagram page, with a link to worship times on About. The 1 Corinthians 13:12 verse beside the church logo at the bottom opens a menu with English KJV and Korean KRV links. Linked from the Connect card on `/`.
 - `/font-study.html` — standalone English and Korean typeface specimen.
-- `/admin` — two-step sign-in required (`/admin/login` → `/admin/verify` or first-time `/admin/setup`); upload, replace, and delete sermon audio; replacing audio preserves sermon metadata and its link; the owner (holder of `ADMIN_PASSWORD`) manages other admins.
+- `/admin` — two-step sign-in required (`/admin/login` → `/admin/verify` or first-time `/admin/setup`); upload, replace, and delete sermon audio; the optional service dropdown preserves existing custom values when editing; replacing audio preserves sermon metadata and its link; the owner (holder of `ADMIN_PASSWORD`) manages other admins.
 
 ## Running locally
 
@@ -67,7 +68,7 @@ The look draws from the sibling project `src/word` (KRV edition: `styles/theme.c
 - **Shape:** angular and regal, with square-cornered panels, cards, buttons, and active nav items framed by a metal-plated rim; generous whitespace.
 - **Metal plating:** `--gold` (hero, cornerstone, primary buttons, active nav, header/footer rules), `--silver` (cards, panels, secondary buttons, inputs), `--brass-plate` (warm accents such as alerts). Plated components set `--plate`, `--fill`, and `--rim`; the shared frame rule in `public/styles.css` draws the rim. Fills must be opaque (the plate shows through translucent fills). Add new components to that shared selector list rather than using `border-radius`.
 - **Buttons:** one design — square-cornered, gold-plated navy `.btn-primary`; silver-plated `.btn-ghost` for secondary actions. Focus re-plates the control in the focus colour.
-- **Clickable Scripture:** `.scripture-picker > summary` uses the shared silver-plated frame and native disclosure marker; hover/open states re-plate in gold and keyboard focus uses the focus colour. Matching English/Korean parenthetical references are supported; unrecognized or conflicting references remain plain text.
+- **Clickable Scripture:** `.scripture-picker > summary` uses the shared silver-plated frame and native disclosure marker except on sermon cards, where it has a left rule and understated text styling; keyboard focus remains visible. Matching English/Korean parenthetical, newline-separated, or `//` references and split verse ranges are supported; saved `//` references display on separate lines. Unrecognized or conflicting references remain plain text.
 - All colors are CSS variables in `:root` of `public/styles.css`; don't hard-code new hex values in components.
 - Accessibility: visible focus rings, skip link, sufficient contrast, `prefers-reduced-motion` respected, responsive down to phones, alt text on meaningful images.
 

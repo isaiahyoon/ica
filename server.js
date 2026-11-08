@@ -9,6 +9,8 @@ import { createStore } from './lib/store.js';
 import { createAdmins } from './lib/admins.js';
 import { mountAdminAuth } from './lib/admin-routes.js';
 import * as view from './lib/render.js';
+import { formatScriptureReference } from './lib/scripture-links.js';
+import { createSermonPreviewRenderer, sermonPreviewVersion } from './lib/sermon-preview.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 
@@ -50,6 +52,7 @@ export function createApp({
     app.set('trust proxy', hops);
   }
   const store = createStore(dataDir);
+  const renderSermonPreview = createSermonPreviewRenderer();
   const audioDir = path.join(uploadDir, 'audio');
   const stagingDir = path.join(uploadDir, 'staging');
   const stagedUploads = new Map();
@@ -102,6 +105,21 @@ export function createApp({
     page(req, res, { title: 'Sermons', active: 'sermons', body: view.sermonsPage({ ...(({ items, ...p }) => ({ sermons: items, pager: p }))(paginate(sermons, req, SERMONS_PER_PAGE)), admin, csrfToken: admin ? auth.csrfToken(req) : '' }) });
   });
 
+  app.get('/sermons/:id/preview.png', async (req, res, next) => {
+    try {
+      const sermon = (await store.read('sermons')).find((item) => item.id === req.params.id);
+      if (!sermon) return res.status(404).type('text').send('Sermon not found. 설교를 찾을 수 없습니다.');
+      res.set({
+        'Cache-Control': 'public, max-age=0, must-revalidate',
+        ETag: `"${sermonPreviewVersion(sermon)}"`,
+      });
+      if (req.fresh) return res.status(304).end();
+      res.type('png').send(await renderSermonPreview(sermon));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get('/sermons/:id', async (req, res) => {
     const sermon = (await store.read('sermons')).find((item) => item.id === req.params.id);
     if (!sermon) {
@@ -113,7 +131,10 @@ export function createApp({
     }
     const admin = auth.isAdmin(req);
     page(req, res, {
-      title: 'Sermons', active: 'sermons',
+      title: sermon.title, active: 'sermons',
+      description: sermon.scripture ? formatScriptureReference(sermon.scripture) : 'Listen to this sermon. 설교를 들어 보세요.',
+      previewImage: `https://immanuelchurchofamerica.org/sermons/${encodeURIComponent(sermon.id)}/preview.png?v=${sermonPreviewVersion(sermon)}`,
+      previewImageAlt: [sermon.title, formatScriptureReference(sermon.scripture), sermon.service].filter(Boolean).join(' · '),
       body: view.sermonsPage({
         sermons: [sermon], pager: { current: 1, pages: 1 }, single: true,
         admin, csrfToken: admin ? auth.csrfToken(req) : '',
@@ -256,7 +277,7 @@ export function createApp({
       const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date ?? '') ? req.body.date : '';
       await store.update('sermons', (list) => [...list, {
         id: crypto.randomUUID(), title, date,
-        speaker: clean(req.body.speaker, 100), scripture: clean(req.body.scripture, 100),
+        speaker: clean(req.body.speaker, 100), service: clean(req.body.service, 100), scripture: clean(req.body.scripture, 100),
         description: clean(req.body.description, 1000),
         file: filename, createdAt: new Date().toISOString(),
       }]);
@@ -319,7 +340,7 @@ export function createApp({
       found = true;
       return {
         ...s, title, date,
-        speaker: clean(req.body.speaker, 100), scripture: clean(req.body.scripture, 100),
+        speaker: clean(req.body.speaker, 100), service: clean(req.body.service, 100), scripture: clean(req.body.scripture, 100),
         description: clean(req.body.description, 1000),
       };
     }));
