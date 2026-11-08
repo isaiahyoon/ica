@@ -263,6 +263,53 @@ export function createApp({
       res.redirect('/admin?notice=' + encodeURIComponent('Sermon uploaded.'));
     });
 
+  app.post('/admin/sermons/:id/audio', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, (req, res, next) => {
+    (async () => {
+      const current = (await store.read('sermons')).find((s) => s.id === req.params.id);
+      if (!current) {
+        return res.status(404).send(view.layout({
+          title: 'Not found', admin: true, path: req.path,
+          body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }),
+        }));
+      }
+
+      const stagedName = req.body.stagedAudio;
+      const staged = typeof stagedName === 'string' ? stagedUploads.get(stagedName) : null;
+      const sessionId = auth.sessionInfo(req)?.id;
+      if (!staged || staged.sessionId !== sessionId || staged.expiresAt <= Date.now()) {
+        if (staged && staged.expiresAt <= Date.now()) {
+          stagedUploads.delete(stagedName);
+          await removeFiles(stagingDir, [stagedName]);
+        }
+        return adminView(req, res, 400, { error: 'The audio upload expired. Please select it again.' });
+      }
+
+      const filename = stagedName;
+      await fs.rename(path.join(stagingDir, filename), path.join(audioDir, filename));
+      stagedUploads.delete(filename);
+      let found = false;
+      try {
+        await store.update('sermons', (list) => list.map((sermon) => {
+          if (sermon.id !== req.params.id) return sermon;
+          found = true;
+          return { ...sermon, file: filename };
+        }));
+      } catch (err) {
+        await removeFiles(audioDir, [filename]);
+        throw err;
+      }
+      if (!found) {
+        await removeFiles(audioDir, [filename]);
+        return res.status(404).send(view.layout({
+          title: 'Not found', admin: true, path: req.path,
+          body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }),
+        }));
+      }
+      await removeFiles(audioDir, [current.file]);
+      res.redirect(`/sermons/${encodeURIComponent(req.params.id)}`);
+    })().catch(next);
+  });
+
   app.post('/admin/sermons/:id/edit', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, async (req, res) => {
     const title = clean(req.body.title, 140);
     const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date ?? '') ? req.body.date : '';

@@ -1,12 +1,10 @@
-function initializeSermonUpload() {
-  const form = document.getElementById('sermon-upload-form');
-  if (!form) return;
-
+function initializeAudioUpload(form) {
   const audio = form.querySelector('input[name="audio"]');
   const staged = form.querySelector('input[name="stagedAudio"]');
-  const progress = document.getElementById('sermon-upload-progress');
-  const status = document.getElementById('sermon-upload-status');
-  const submit = document.getElementById('sermon-upload-submit');
+  const progress = form.querySelector('[data-audio-progress]');
+  const status = form.querySelector('[data-audio-status]');
+  const submit = form.querySelector('[data-audio-submit]');
+  const uploadUrl = form.dataset.uploadUrl;
   let request = null;
   let uploadId = '';
 
@@ -36,7 +34,7 @@ function initializeSermonUpload() {
     data.set('audio', file);
     const current = new XMLHttpRequest();
     request = current;
-    current.open('POST', '/admin/sermons/audio');
+    current.open('POST', uploadUrl);
     current.upload.addEventListener('progress', (event) => {
       if (request !== current) return;
       if (event.lengthComputable) {
@@ -66,7 +64,9 @@ function initializeSermonUpload() {
       staged.value = uploadId;
       progress.value = 100;
       submit.disabled = false;
-      status.textContent = 'Audio is ready. Add sermon details and upload the sermon. · 오디오 업로드가 완료되었습니다. 설교 정보를 입력한 후 게시해 주세요.';
+      status.textContent = form.action.endsWith('/audio')
+        ? 'Audio is ready. Submit to replace the current audio. · 오디오 업로드가 완료되었습니다. 제출하면 현재 오디오가 교체됩니다.'
+        : 'Audio is ready. Add sermon details and upload the sermon. · 오디오 업로드가 완료되었습니다. 설교 정보를 입력한 후 게시해 주세요.';
     });
     current.addEventListener('error', () => {
       if (request !== current) return;
@@ -87,6 +87,10 @@ function initializeSermonUpload() {
   });
 }
 
+function initializeAudioUploads() {
+  document.querySelectorAll('form[data-audio-upload]').forEach(initializeAudioUpload);
+}
+
 function initializeAdminConfirmations() {
   document.addEventListener('submit', (event) => {
     const confirmedForm = event.target.closest('form[data-confirm]');
@@ -96,5 +100,5 @@ function initializeAdminConfirmations() {
   });
 }
 
-initializeSermonUpload();
+initializeAudioUploads();
 initializeAdminConfirmations();

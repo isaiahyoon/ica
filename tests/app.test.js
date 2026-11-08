@@ -560,7 +560,7 @@ test('admin login enforces same-origin requests and throttles failed attempts', 
 });
 
 test('admin can upload, list and delete sermon audio', async (t) => {
-  const { base, uploadDir, close } = await boot();
+  const { base, dataDir, uploadDir, close } = await boot();
   t.after(close);
   const cookie = await login(base);
   const csrf = await csrfToken(base, cookie);
@@ -592,6 +592,11 @@ test('admin can upload, list and delete sermon audio', async (t) => {
   assert.equal((await fetch(`${base}/sermons/${sid}`)).status, 200);
   const src = sermons.match(/src="(\/uploads\/audio\/[^"]+)"/)[1];
   assert.equal((await fetch(base + src)).status, 200);
+  assert.doesNotMatch(sermons, /data-audio-upload/);
+  const replacementControls = (await fetch(`${base}/sermons`, { headers: { cookie } })).text();
+  assert.match(await replacementControls, /<script src="\/scripts\/admin\.js" defer><\/script>/);
+  assert.match(await replacementControls, new RegExp(`action="/admin/sermons/${sid}/audio"`));
+  assert.match(await replacementControls, /Replace this sermon’s audio\?/);
 
   assert.doesNotMatch(sermons, /\/edit/);
   const sedit = (fields) => fetch(`${base}/admin/sermons/${sid}/edit`, { method: 'POST', body: new URLSearchParams({ _csrf: csrf, ...fields }), headers: { cookie, origin: base }, redirect: 'manual' });
@@ -613,6 +618,34 @@ test('admin can upload, list and delete sermon audio', async (t) => {
   assert.equal((await fetch(`${base}/admin/sermons`, { method: 'POST', body: bad, headers: { cookie, origin: base } })).status, 400);
 
   const admin = await (await fetch(`${base}/sermons`, { headers: { cookie } })).text();
+  const replacementAudio = new FormData();
+  replacementAudio.set('_csrf', csrf);
+  replacementAudio.set('audio', new Blob(['trimmed sermon audio'], { type: 'audio/mpeg' }), 'trimmed.mp3');
+  const stagedReplacement = await fetch(`${base}/admin/sermons/audio`, {
+    method: 'POST', body: replacementAudio, headers: { cookie, origin: base },
+  });
+  assert.equal(stagedReplacement.status, 201);
+  const { uploadId: replacementId } = await stagedReplacement.json();
+  const replacementWithoutCsrf = await fetch(`${base}/admin/sermons/${sid}/audio`, {
+    method: 'POST', headers: { cookie, origin: base, 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ stagedAudio: replacementId }), redirect: 'manual',
+  });
+  assert.equal(replacementWithoutCsrf.status, 403);
+  const replaced = await fetch(`${base}/admin/sermons/${sid}/audio`, {
+    method: 'POST', headers: { cookie, origin: base, 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: csrf, stagedAudio: replacementId }), redirect: 'manual',
+  });
+  assert.equal(replaced.status, 302);
+  assert.equal(replaced.headers.get('location'), `/sermons/${sid}`);
+  assert.equal((await fetch(base + src)).status, 404);
+  assert.equal(await (await fetch(`${base}/uploads/audio/${replacementId}`)).text(), 'trimmed sermon audio');
+  const storedSermons = JSON.parse(await fs.readFile(path.join(dataDir, 'sermons.json'), 'utf8'));
+  assert.equal(storedSermons[0].id, sid);
+  assert.equal(storedSermons[0].title, '은혜');
+  assert.equal(storedSermons[0].speaker, '');
+  assert.equal(storedSermons[0].scripture, '요한복음 3:16');
+  assert.equal(storedSermons[0].file, replacementId);
+
   const del = admin.match(/action="(\/admin\/sermons\/[^"]+\/delete)"/)[1];
   const deleted = await fetch(base + del, {
     method: 'POST',
@@ -637,13 +670,15 @@ test('admin can stage audio immediately and publish it with sermon details', asy
   const adminScript = await fetch(`${base}/scripts/admin.js`);
   assert.equal(adminScript.status, 200);
   const adminScriptSource = await adminScript.text();
-  assert.match(adminScriptSource, /\/admin\/sermons\/audio/);
+  assert.match(page, /data-upload-url="\/admin\/sermons\/audio"/);
+  assert.match(adminScriptSource, /form\.dataset\.uploadUrl/);
   assert.match(adminScriptSource, /form\[data-confirm\]/);
   let submitHandler;
   let allowSubmission = false;
   runInNewContext(adminScriptSource, {
     document: {
       getElementById: () => null,
+      querySelectorAll: () => [],
       addEventListener: (_type, handler) => { submitHandler = handler; },
     },
     window: { confirm: () => allowSubmission },
