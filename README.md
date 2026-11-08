@@ -35,6 +35,52 @@ If `ADMIN_PASSWORD` is not set in local development, a freshly generated passwor
 
 Other commands: `npm run dev` (auto-restart), `npm test`, `npm run reset-owner-2fa` (clears the owner's authenticator if their phone and recovery codes are both lost). Set `PORT` to change the port.
 
+## Instagram sermon slides
+
+Different sermons use visibly different compositions, not just changed gradients: the renderer rotates flowing silk, vaulted arches, angular corner fans, and oval medallions by existing image count and batch order, with seeded variations. The assistant must compare the set visually before delivery, especially for batches larger than four. Automated checks compare same-seed compositions to ensure their geometry differs substantially.
+
+The art-direction quality target is richer than those geometry checks: the owner's navy-covering reference calls for textured, sculptural midnight-blue folds, luminous interwoven pastel silk, believable depth and lighting, and metallic-gold edges and glints within the artwork. Flat pastel triangles, concentric bands, and generic borders are not an acceptable substitute. This is a visual quality requirement, not a claim that the current procedural renderer already achieves the reference's material richness.
+
+For separately approved reference-inspired image generation, include an optional `backgroundPath` (absolute local image path) in each JSON entry. The renderer fits that artwork to the portrait and overlays exact English/Korean text locally instead of adding procedural decorations. Use different artwork for each sermon and inspect the finished slide. The renderer never calls an image service itself; separately generating backgrounds may consume credits and needs approval.
+
+Artwork overlays balance title lines, render Korean companion text at a smaller size with deliberate language separation, and space Scripture and names by their measured heights. Section gaps are at least 60 logical pixels, greater than language gaps. The redundant speaker label is omitted; dense metadata is rejected. The understated bilingual founding-year footer sits at the bottom and may overlap ribbons.
+
+All Instagram lettering uses the restrained ivory `--paper` token and shares the canvas centerline, with no individually offset groups. The text presentation is solemn and stately; pastel and metallic colors belong to the artwork, not the lettering. This applies to both procedural slides and supplied artwork.
+
+For older viewers, both rendering paths share enlarged secondary sermon metadata (at least 64 exported pixels), lightly reinforced regular serif strokes, and comfortable line/language spacing. The quiet bottom footer uses smaller 52/48 exported-pixel lettering. Dense metadata is rejected instead of being reduced below the reading minimum. Inspect the finished slides at phone size as well as full resolution.
+
+Slide footers read **Since 1994 · 1994년부터** instead of a listening invitation, matching the church founding year displayed on the website.
+
+Ask the assistant: “Create Instagram posts for these sermon links: …” The repository's `instagram-post` skill verifies the linked metadata, creates **one 2160×2700 portrait JPG per link**, and returns each image, a caption, and five hashtags. The caption is the saved **Sermon Overview** verbatim, with a blank line between English and Korean, followed by “Listen to the sermon via the link in our bio.” and “프로필 링크를 통해 설교를 들으실 수 있습니다.” on separate lines. No paraphrasing or invented translations; a missing overview stops generation. Captions appear above the hashtags. The first two hashtags are always `#ImmanuelChurchOfAmerica` and `#미주임마누엘교회`; the remaining three are relevant to the sermon title and/or Scripture.
+
+Each slide always displays the saved **title, speaker, and Scripture reference**, preserving available English/Korean text. The saved **service label** replaces the generic "Sermon" heading, with English and Korean on separate lines when available; that heading is omitted if no service is specified. Missing required fields stop generation rather than being invented. Deep midnight/royal blue replaces greenish teal in the artwork, with visibly generous yellow, lavender/purple, and pink glows and flowing, layered gold-edged ribbons inspired by the owner's navy-covering reference. Each render varies its gradients, ribbon curves, and accent placement while keeping text on dark blue and blue dominant. The artwork-specific `--midnight`, `--royal-blue`, and `--ribbon-blue` tokens live in `public/styles.css` and do not change the website's existing surfaces. Bundled regular serif fonts render English and Korean locally, without a browser or external image service.
+
+For a quick render directly from the local sermon store:
+
+```sh
+npm run instagram -- "http://localhost:8100/sermons/<sermon-id>" "https://immanuelchurchofamerica.org/sermons/<another-id>"
+```
+
+URL arguments identify sermons in `data/sermons.json` (or `ICA_DATA_DIR`, overridden by `--data-dir`). **They do not fetch live pages**; the assistant checks supplied pages before using that snapshot. Quick renders use `#Sermon #BibleTeaching #Scripture` as the additional tags.
+
+For verified metadata from a page not in the local store, or custom per-sermon tags, use `npm run instagram -- --input "/path/to/metadata.json"` with a JSON array:
+
+```json
+[{
+  "url": "https://immanuelchurchofamerica.org/sermons/eb590a2a-e48d-4160-b335-cdff6b3352cc",
+  "title": "<exact saved title>",
+  "speakerEn": "<saved English speaker>",
+  "speakerKo": "<saved Korean speaker>",
+  "scripture": "<exact saved Scripture reference>",
+  "service": "<saved service label, if present>",
+  "date": "2026-11-08",
+  "description": "<exact saved Sermon Overview>",
+  "hashtags": ["<relevant tag>", "<relevant tag>", "<relevant tag>"]
+}]
+```
+
+One speaker language is sufficient; legacy `speaker` text is supported. Provide exactly three distinct discretionary hashtags; the two church tags are prepended automatically. Inputs are validated before generation, and overly dense text is rejected rather than shrunk below legible sizes. The command prints image paths, captions, and hashtags, and writes only JPGs directly in `data/instagram/` (git-ignored), with **no subfolders**. Filenames use `sermons-[saved YYYY-MM-DD date]-[service slug].jpg`, e.g. `sermons-2026-11-08-sunday-2nd-service.jpg`. Use the saved sermon date, not the generation date. The slug uses the saved English service when available, otherwise Korean, lowercased and separated by hyphens. Missing values use `undated` and `unspecified-service`; invalid dates are rejected. Existing files are preserved, with repeat names receiving `-2`, `-3`, etc., including concurrent runs. Use `--output "/path/to/folder"` to change the output root. This is a local assistant tool, not an Express endpoint or Instagram publishing integration.
+
 ## Local sermon transcription for Instagram drafts
 
 This optional command runs **only on an Apple Silicon Mac**, with macOS 15+ and Python 3.10+. It is not a website feature or Render dependency: no public/admin transcription endpoint is added. The free Whisper model runs locally; recordings are never uploaded to a transcription service. The first run downloads model weights (roughly 1.6 GB) from Hugging Face; later runs reuse the local cache.
