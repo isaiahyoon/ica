@@ -12,6 +12,7 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 - `lib/auth.js` — admin password validation, revocable HttpOnly session cookie (pending vs. full stages), CSRF tokens, and bounded login throttling.
 - `lib/admins.js`, `lib/admin-routes.js`, `lib/totp.js` — two-step admin sign-in (password then TOTP/recovery code, no usernames), per-admin passwords and owner-managed admins; `scripts/reset-owner-2fa.js` clears the owner's authenticator.
 - `lib/store.js` — JSON-file store in `data/` (git-ignored). Uploaded files live in `uploads/` (git-ignored).
+- `lib/sermon-metadata.js` — bilingual sermon speaker and service display, including compatibility with older saved details.
 - `scripts/transcribe-sermon.py` — optional local-only Apple Silicon Whisper transcription for audio files or church sermon URLs; timestamped transcripts in `data/transcripts/`, never a website endpoint.
 - `public/scripts/` — page-specific browser behavior, separate from server-rendered templates.
 - `public/styles.css` — the single stylesheet and all design tokens.
@@ -37,7 +38,7 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 - `/sermons` — public audio list and individual sermon pages with optional service information, expandable descriptions, and multiline text; recognized Scripture references open an accessible menu with English KJV and Korean KRV links, including matching `//` references and separate links for split verse ranges. `/sermons/:id/preview.png` embeds the title and saved Bible reference in a dynamic image, never verse text or the sermon description; versioned image URLs change with those fields. Without a reference, the image shows the title and church branding, and metadata offers a bilingual listening invitation.
 - `/contact` — public contact page with the church address, Google Maps link, bilingual SVG location diagram (parking directly behind the building's south side), visitor information, and Instagram page, with a link to worship times on About. The 1 Corinthians 13:12 verse beside the church logo at the bottom opens a menu with English KJV and Korean KRV links. Linked from the Connect card on `/`.
 - `/font-study.html` — standalone English and Korean typeface specimen.
-- `/admin` — two-step sign-in required (`/admin/login` → `/admin/verify` or first-time `/admin/setup`); upload, replace, and delete sermon audio; the optional service dropdown preserves existing custom values when editing; replacing audio preserves sermon metadata and its link; the owner (holder of `ADMIN_PASSWORD`) manages other admins.
+- `/admin` — two-step sign-in required (`/admin/login` → `/admin/verify` or first-time `/admin/setup`); upload, replace, and delete sermon audio; speaker names have separate English and Korean fields, and the optional service dropdown preserves existing custom values when editing; replacing audio preserves sermon metadata and its link; the owner (holder of `ADMIN_PASSWORD`) manages other admins.
 
 ## Running locally
 

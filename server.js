@@ -10,6 +10,7 @@ import { createAdmins } from './lib/admins.js';
 import { mountAdminAuth } from './lib/admin-routes.js';
 import * as view from './lib/render.js';
 import { formatScriptureReference } from './lib/scripture-links.js';
+import { splitBilingual } from './lib/sermon-metadata.js';
 import { createSermonPreviewRenderer, sermonPreviewVersion } from './lib/sermon-preview.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -34,6 +35,12 @@ function uploader(dir, { exts, max }, mimePrefix, files) {
 }
 
 const clean = (s, n) => String(s ?? '').trim().slice(0, n);
+const speakerFields = (body) => {
+  const { en, ko } = body.speakerEn !== undefined || body.speakerKo !== undefined
+    ? { en: clean(body.speakerEn, 100), ko: clean(body.speakerKo, 100) }
+    : splitBilingual(clean(body.speaker, 100));
+  return { speaker: [en, ko].filter(Boolean).join('\n'), speakerEn: en, speakerKo: ko };
+};
 const removeFiles = (dir, names) => Promise.all(names.map((n) => fs.rm(path.join(dir, n), { force: true })));
 
 export function createApp({
@@ -277,7 +284,7 @@ export function createApp({
       const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date ?? '') ? req.body.date : '';
       await store.update('sermons', (list) => [...list, {
         id: crypto.randomUUID(), title, date,
-        speaker: clean(req.body.speaker, 100), service: clean(req.body.service, 100), scripture: clean(req.body.scripture, 100),
+        ...speakerFields(req.body), service: clean(req.body.service, 100), scripture: clean(req.body.scripture, 100),
         description: clean(req.body.description, 1000),
         file: filename, createdAt: new Date().toISOString(),
       }]);
@@ -340,7 +347,7 @@ export function createApp({
       found = true;
       return {
         ...s, title, date,
-        speaker: clean(req.body.speaker, 100), service: clean(req.body.service, 100), scripture: clean(req.body.scripture, 100),
+        ...speakerFields(req.body), service: clean(req.body.service, 100), scripture: clean(req.body.scripture, 100),
         description: clean(req.body.description, 1000),
       };
     }));

@@ -517,7 +517,8 @@ test('sermon fields preserve line breaks and service through upload and editing'
   const cookie = await login(base);
   const csrf = await csrfToken(base, cookie);
   const admin = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
-  for (const name of ['title', 'speaker', 'scripture', 'description']) {
+  assert.match(admin, /<span lang="en">Sermon Overview<\/span><span lang="ko">설교 개요<\/span>[\s\S]*?<textarea name="description"[^>]*aria-label="Sermon Overview · 설교 개요"/);
+  for (const name of ['title', 'speakerEn', 'speakerKo', 'scripture', 'description']) {
     assert.match(admin, new RegExp(`<textarea name="${name}"`));
   }
   const services = [
@@ -530,7 +531,7 @@ test('sermon fields preserve line breaks and service through upload and editing'
   for (const service of services) assert.ok(select.includes(`<option value="${service}">${service}</option>`));
   const upload = new FormData();
   const fields = {
-    title: 'Title <one>\n제목', speaker: 'Speaker\n설교자', service: 'Sunday service\n주일 예배',
+    title: 'Title <one>\n제목', speakerEn: 'Speaker\nName', speakerKo: '설교자\n이름', service: 'Sunday service\n주일 예배',
     date: '2026-11-08', scripture: 'John 12:23-26 //\n요한복음 12:23-26',
     description: 'First line & more\n둘째 줄',
   };
@@ -544,9 +545,10 @@ test('sermon fields preserve line breaks and service through upload and editing'
   for (const url of ['/sermons', `/sermons/${stored.id}`]) {
     const html = (await (await fetch(base + url)).text()).replaceAll('\r\n', '\n');
     assert.match(html, /<h3 lang="ko">Title &lt;one&gt;\n제목<\/h3>/);
-    assert.match(html, /<span>Speaker\n설교자<\/span> · <span>Sunday service\n주일 예배<\/span> · <span>November 8, 2026/);
+    assert.match(html, /<span class="sermon-meta-line" lang="en"><span>Speaker\nName<\/span> · <span>Sunday service<\/span> · <span>November 8, 2026<\/span><\/span>/);
+    assert.match(html, /<span class="sermon-meta-line" lang="ko"><span>설교자\n이름<\/span> · <span>주일 예배<\/span> · <span>2026년 11월 8일<\/span><\/span>/);
     assert.match(html, /<summary class="scripture" lang="ko">John 12:23-26\n요한복음 12:23-26<\/summary>/);
-    assert.match(html, /<details class="sermon-description"><summary><span class="bilingual">/);
+    assert.match(html, /<details class="sermon-description"><summary><span class="bilingual"><span lang="en">Sermon Overview<\/span><span lang="ko">설교 개요<\/span>/);
     assert.match(html, /<p>First line &amp; more\n둘째 줄<\/p><\/details>/);
     assert.match(html, /href="https:\/\/theamazingword\.org\/kjv\/b\/john\/c\/12\/v\/23-26"/);
   }
@@ -556,7 +558,11 @@ test('sermon fields preserve line breaks and service through upload and editing'
   });
   assert.equal(edit.status, 302);
   const edited = (await (await fetch(`${base}/sermons/${stored.id}`, { headers: { cookie } })).text()).replaceAll('\r\n', '\n');
-  assert.match(edited, /<span>Evening\n저녁 예배<\/span>/);
+  assert.match(edited, /<textarea name="description"[^>]*aria-label="Sermon Overview · 설교 개요">/);
+  assert.match(edited, /<span>Evening<\/span>/);
+  assert.match(edited, /<span>저녁 예배<\/span>/);
+  assert.match(edited, /<textarea name="speakerEn"[^>]*>Speaker\nName<\/textarea>/);
+  assert.match(edited, /<textarea name="speakerKo"[^>]*>설교자\n이름<\/textarea>/);
   assert.match(edited, /<textarea name="scripture"[^>]*>John 12:23-26\n요한복음 12:23-26<\/textarea>/);
   assert.match(edited, /href="https:\/\/theamazingword\.org\/kjv\/b\/john\/c\/12\/v\/23-26"/);
   assert.match(edited, /<option value="Evening&#10;저녁 예배" selected>Evening\n저녁 예배<\/option>/);
@@ -571,15 +577,60 @@ test('sermon fields preserve line breaks and service through upload and editing'
     assert.equal(updated.status, 302);
     const page = await (await fetch(`${base}/sermons/${stored.id}`, { headers: { cookie } })).text();
     assert.ok(page.includes(`<option value="${service}" selected>${service}</option>`));
-    assert.ok(page.includes(`<span>${service}</span>`));
+    const koreanStart = service.search(/[\uAC00-\uD7AF]/u);
+    assert.ok(page.includes(`<span>${service.slice(0, koreanStart).trim()}</span>`));
+    assert.ok(page.includes(`<span>${service.slice(koreanStart)}</span>`));
     const [persisted] = JSON.parse(await fs.readFile(path.join(dataDir, 'sermons.json'), 'utf8'));
     assert.equal(persisted.service, service);
   }
   const css = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
   assert.match(css, /\.sermon h3, \.sermon \.meta span, \.sermon \.scripture, \.sermon-description p\s*\{[^}]*white-space:\s*pre-line/s);
   assert.match(css, /\.sermon-description summary\s*\{[^}]*display:\s*list-item;[^}]*cursor:\s*pointer/s);
+  assert.match(css, /\.sermon-description summary\s*\{[^}]*list-style-position:\s*inside/s);
+  assert.match(css, /\.sermon-description summary \.bilingual\s*\{[^}]*margin-left:\s*\.45em/s);
   assert.match(css, /\.sermon-description summary::marker\s*\{[^}]*color:\s*var\(--brass\)/s);
   assert.match(css, /\.sermon-description summary:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--focus\)/s);
+  assert.match(css, /\.sermon\s*\{\s*padding:\s*1\.4rem 1\.75rem 1\.2rem 2\.25rem;/);
+  assert.match(css, /\.sermon \.scripture-picker\s*\{\s*margin:\s*0 0 \.5rem;/);
+  assert.match(css, /\.sermon p\.scripture\s*\{[^}]*margin:\s*0 0 \.5rem;/s);
+  assert.match(css, /\.sermon-description\s*\{\s*margin:\s*\.15rem 0 \.4rem;/);
+  assert.match(css, /\.sermon audio\s*\{\s*margin-top:\s*\.4rem;/);
+});
+
+test('existing and single-language speaker details remain editable and correctly displayed', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const csrf = await csrfToken(base, cookie);
+  const fixtures = [
+    { id: 'legacy', speaker: 'Pastor John // 윤태선 목사', service: 'Friday Service 금요예배', date: '2026-11-08' },
+    { id: 'korean', speaker: '윤태선 목사', service: '', date: '' },
+    { id: 'english', speaker: 'Pastor John', service: '', date: '' },
+    { id: 'unsplit', speaker: 'First line\nSecond line\nThird line', service: '', date: '' },
+  ].map((sermon) => ({ ...sermon, title: 'Sermon', file: 'sermon.mp3', createdAt: '2026-11-08T00:00:00Z' }));
+  await fs.writeFile(path.join(dataDir, 'sermons.json'), JSON.stringify(fixtures));
+  const legacy = await (await fetch(`${base}/sermons/legacy`, { headers: { cookie } })).text();
+  assert.match(legacy, /<span class="sermon-meta-line" lang="en"><span>Pastor John<\/span> · <span>Friday Service<\/span> · <span>November 8, 2026<\/span><\/span>/);
+  assert.match(legacy, /<span class="sermon-meta-line" lang="ko"><span>윤태선 목사<\/span> · <span>금요예배<\/span> · <span>2026년 11월 8일<\/span><\/span>/);
+  assert.match(legacy, /<textarea name="speakerEn"[^>]*>Pastor John<\/textarea>/);
+  assert.match(legacy, /<textarea name="speakerKo"[^>]*>윤태선 목사<\/textarea>/);
+  for (const [id, language, speaker] of [['korean', 'ko', '윤태선 목사'], ['english', 'en', 'Pastor John']]) {
+    const page = await (await fetch(`${base}/sermons/${id}`)).text();
+    assert.ok(page.includes(`<span class="sermon-meta-line" lang="${language}"><span>${speaker}</span></span>`));
+    assert.doesNotMatch(page, new RegExp(`<span class="sermon-meta-line" lang="${language === 'en' ? 'ko' : 'en'}">`));
+  }
+  const unsplit = await (await fetch(`${base}/sermons/unsplit`, { headers: { cookie } })).text();
+  assert.match(unsplit, /<textarea name="speakerEn"[^>]*>First line\nSecond line\nThird line<\/textarea>/);
+  const edit = await fetch(`${base}/admin/sermons/legacy/edit`, {
+    method: 'POST', headers: { ...FORM(base), cookie }, redirect: 'manual',
+    body: new URLSearchParams({ _csrf: csrf, title: 'Sermon', speakerEn: 'Pastor <John>', speakerKo: '윤태선 목사', service: 'Friday Service 금요예배', date: '2026-11-08' }),
+  });
+  assert.equal(edit.status, 302);
+  const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'sermons.json'), 'utf8')).find((sermon) => sermon.id === 'legacy');
+  assert.equal(saved.speakerEn, 'Pastor <John>');
+  assert.equal(saved.speakerKo, '윤태선 목사');
+  const edited = await (await fetch(`${base}/sermons/legacy`)).text();
+  assert.match(edited, /<span>Pastor &lt;John&gt;<\/span>/);
 });
 
 test('sermon link previews use the sermon title and passage reference, not verse text', async (t) => {
@@ -814,7 +865,8 @@ test('admin can upload, list and delete sermon audio', async (t) => {
   assert.equal((await fetch(`${base}/admin/sermons`, { method: 'POST', body: s, headers: { cookie, origin: base }, redirect: 'manual' })).status, 302);
   const sermons = await (await fetch(`${base}/sermons`)).text();
   assert.match(sermons, /&lt;b&gt;Grace&lt;\/b&gt;/);
-  assert.match(sermons, /<span>Sunday 1st Service 주일 1부 예베<\/span>/);
+  assert.match(sermons, /<span>Sunday 1st Service<\/span>/);
+  assert.match(sermons, /<span>주일 1부 예베<\/span>/);
   const [uploadedSermon] = JSON.parse(await fs.readFile(path.join(dataDir, 'sermons.json'), 'utf8'));
   assert.equal(uploadedSermon.service, 'Sunday 1st Service 주일 1부 예베');
   const sid = sermons.match(/id="sermon-([^"]+)"/)[1];

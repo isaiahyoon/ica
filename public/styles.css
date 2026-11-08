@@ -212,7 +212,7 @@ nav a:focus-visible { box-shadow: inset 0 0 0 2px var(--brass-soft); }
 .scripture-picker > summary:focus-visible { --plate: linear-gradient(var(--focus), var(--focus)); }
 .hero-verse .scripture-picker > summary, .cornerstone .scripture-picker > summary, .site-footer .scripture-picker > summary { margin-inline: auto; }
 .scripture-picker cite { color: var(--deep-teal); }
-.sermon .scripture-picker { margin: 0 0 .75rem; }
+.sermon .scripture-picker { margin: 0 0 .5rem; }
 .sermon .scripture-picker > summary {
   display: block; width: fit-content; margin: 0; padding: .15rem .8rem;
   background: none; border-left: 2px solid var(--brass-soft); color: var(--deep-teal);
@@ -347,7 +347,7 @@ a.page-num:hover, a.page-step:hover { background: var(--navy); color: #fff; bord
 .sermon, .panel { --plate: var(--silver); --fill: linear-gradient(160deg, #fff, var(--paper) 60%, var(--blue)); --rim: 3px; padding: 1.5rem; }
 .sermon:nth-child(3n+2) { --fill: linear-gradient(160deg, #fff, var(--paper) 55%, var(--lavender)); }
 .sermon:nth-child(3n+3) { --fill: linear-gradient(160deg, #fff, var(--paper) 55%, var(--pink)); }
-.sermon { padding: 1.75rem 1.75rem 1.5rem 2.25rem; }
+.sermon { padding: 1.4rem 1.75rem 1.2rem 2.25rem; }
 .sermon::after {
   content: ""; position: absolute; z-index: 0; pointer-events: none;
   left: var(--rim); top: var(--rim); bottom: var(--rim); width: .5rem; background: var(--gold);
@@ -357,16 +357,18 @@ a.page-num:hover, a.page-step:hover { background: var(--navy); color: #fff; bord
 .sermon-head { padding-bottom: .75rem; margin-bottom: .9rem; border-bottom: 1px solid rgba(169, 124, 53, .35); }
 .sermon h3 { margin: 0 0 .3em; font-size: 1.5rem; line-height: 1.2; color: var(--navy); }
 .sermon .meta { margin: 0; font: 400 .8rem var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--brass); }
+.sermon-meta-line { display: block; }
+.sermon-meta-line + .sermon-meta-line { margin-top: .4em; }
 .sermon h3, .sermon .meta span, .sermon .scripture, .sermon-description p { white-space: pre-line; overflow-wrap: anywhere; }
-.sermon p.scripture { display: inline-block; padding: .15rem .8rem; margin: 0 0 .75rem; font-style: normal; border-left: 2px solid var(--brass-soft); }
-.sermon-description { margin: .25rem 0 .75rem; }
-.sermon-description summary { display: list-item; width: fit-content; margin-left: 1em; color: var(--deep-teal); font: 400 .9rem var(--sans); cursor: pointer; }
+.sermon p.scripture { display: inline-block; padding: .15rem .8rem; margin: 0 0 .5rem; font-style: normal; border-left: 2px solid var(--brass-soft); }
+.sermon-description { margin: .15rem 0 .4rem; }
+.sermon-description summary { display: list-item; list-style-position: inside; width: fit-content; color: var(--deep-teal); font: 400 .9rem var(--sans); cursor: pointer; }
 .sermon-description summary::marker { color: var(--brass); }
-.sermon-description summary .bilingual { display: inline-flex; flex-direction: row; flex-wrap: wrap; gap: .25em .6em; }
+.sermon-description summary .bilingual { display: inline-flex; flex-direction: row; flex-wrap: wrap; gap: .25em .6em; margin-left: .45em; }
 .sermon-description summary:hover { text-decoration: underline; text-underline-offset: 3px; }
 .sermon-description summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 .sermon-description p { margin: .75rem 0 0; }
-.sermon audio { margin-top: .75rem; border-radius: 2rem; }
+.sermon audio { margin-top: .4rem; border-radius: 2rem; }
 .sermon-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
 .sermon-action { font-size: .85rem; letter-spacing: .04em; }
 .sermon-action .bilingual { flex-direction: row; flex-wrap: wrap; gap: .25em .6em; align-items: baseline; }
