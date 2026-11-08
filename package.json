@@ -8,6 +8,7 @@
     "start": "node server.js",
     "dev": "ADMIN_PASSWORD=testtesttesttest node --watch server.js",
     "test": "node --test",
+    "instagram": "node scripts/render-instagram-post.js",
     "reset-owner-2fa": "node scripts/reset-owner-2fa.js",
     "transcribe:setup": "python3 -m venv .venv-transcribe && .venv-transcribe/bin/python -m pip install -r scripts/transcription-requirements.txt",
     "transcribe": ".venv-transcribe/bin/python scripts/transcribe-sermon.py"

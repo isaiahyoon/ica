@@ -3,6 +3,9 @@
   --ink: #223b55;          /* navy ink: text and regal surfaces */
   --navy: #223b55;
   --navy-deep: #182b40;
+  --midnight: #03112c;
+  --royal-blue: #163c78;
+  --ribbon-blue: #729fe0;
   --text: #2b3440;
   --muted: #5d6c7c;
   --paper: #fbfdfe;
@@ -356,6 +359,8 @@ a.page-num:hover, a.page-step:hover { background: var(--navy); color: #fff; bord
 .sermon-edit summary { cursor: pointer; color: var(--navy); }
 .sermon-head { padding-bottom: .75rem; margin-bottom: .9rem; border-bottom: 1px solid rgba(169, 124, 53, .35); }
 .sermon h3 { margin: 0 0 .3em; font-size: 1.5rem; line-height: 1.2; color: var(--navy); }
+.sermon h3 a { color: inherit; font: inherit; text-decoration: none; }
+.sermon h3 a:hover { text-decoration: underline; }
 .sermon .meta { margin: 0; font: 400 .8rem var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--brass); }
 .sermon-meta-line { display: block; }
 .sermon-meta-line + .sermon-meta-line { margin-top: .4em; }

@@ -319,6 +319,7 @@ test('sermons can be shared with the native share sheet or copied as a link', as
     description: '', file: 'sermon.mp3', createdAt: new Date().toISOString(),
   }]));
   const html = await (await fetch(`${base}/sermons`)).text();
+  assert.match(html, /<h3><a href="\/sermons\/share-id">A sermon<\/a><\/h3>/);
   assert.match(html, /<script src="\/scripts\/sermon-sharing\.js" defer><\/script>/);
   assert.doesNotMatch(html, /<script>([\s\S]*?)<\/script>/);
   assert.match(html, /data-share-title="A sermon"/);
@@ -330,7 +331,7 @@ test('sermons can be shared with the native share sheet or copied as a link', as
   assert.equal(detailResponse.status, 200);
   const detailHtml = await detailResponse.text();
   assert.match(detailHtml, /href="\/sermons"><span class="bilingual"><span lang="en">All sermons<\/span>/);
-  assert.match(detailHtml, /<h3>A sermon<\/h3>/);
+  assert.match(detailHtml, /<h3><a href="\/sermons\/share-id">A sermon<\/a><\/h3>/);
   assert.doesNotMatch(detailHtml, /class="pagination"/);
   assert.equal((await fetch(`${base}/sermons/missing-sermon`)).status, 404);
   const scriptResponse = await fetch(`${base}/scripts/sermon-sharing.js`);
@@ -511,6 +512,12 @@ test('clickable Scripture uses plated borders and hover, open, and keyboard-focu
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\*\s*\{[^}]*transition:\s*none !important/s);
 });
 
+test('sermon title links preserve heading styling until hover', async () => {
+  const css = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  assert.match(css, /\.sermon h3 a\s*\{[^}]*color:\s*inherit;[^}]*font:\s*inherit;[^}]*text-decoration:\s*none/s);
+  assert.match(css, /\.sermon h3 a:hover\s*\{[^}]*text-decoration:\s*underline/s);
+});
+
 test('sermon fields preserve line breaks and service through upload and editing', async (t) => {
   const { base, dataDir, close } = await boot();
   t.after(close);
@@ -544,7 +551,7 @@ test('sermon fields preserve line breaks and service through upload and editing'
   for (const [name, value] of Object.entries(fields)) assert.equal(stored[name].replaceAll('\r\n', '\n'), value);
   for (const url of ['/sermons', `/sermons/${stored.id}`]) {
     const html = (await (await fetch(base + url)).text()).replaceAll('\r\n', '\n');
-    assert.match(html, /<h3 lang="ko">Title &lt;one&gt;\n제목<\/h3>/);
+    assert.ok(html.includes(`<h3 lang="ko"><a href="/sermons/${stored.id}">Title &lt;one&gt;\n제목</a></h3>`));
     assert.match(html, /<span class="sermon-meta-line" lang="en"><span>Speaker\nName<\/span> · <span>Sunday service<\/span> · <span>November 8, 2026<\/span><\/span>/);
     assert.match(html, /<span class="sermon-meta-line" lang="ko"><span>설교자\n이름<\/span> · <span>주일 예배<\/span> · <span>2026년 11월 8일<\/span><\/span>/);
     assert.match(html, /<summary class="scripture" lang="ko">John 12:23-26\n요한복음 12:23-26<\/summary>/);
@@ -888,7 +895,7 @@ test('admin can upload, list and delete sermon audio', async (t) => {
   assert.match(renamed, /Pastor Kim/);
   assert.equal((await sedit({ title: '은혜', scripture: '요한복음 3:16' })).status, 302);
   const koreanSermon = await (await fetch(`${base}/sermons`)).text();
-  assert.match(koreanSermon, /<h3 lang="ko">은혜<\/h3>/);
+  assert.ok(koreanSermon.includes(`<h3 lang="ko"><a href="/sermons/${sid}">은혜</a></h3>`));
   assert.match(koreanSermon, /<summary class="scripture" lang="ko">요한복음 3:16<\/summary>/);
   assert.equal((await sedit({ title: '' })).status, 400);
   assert.equal((await fetch(`${base}/admin/sermons/nope/edit`, { method: 'POST', body: new URLSearchParams({ _csrf: csrf, title: 'x' }), headers: { cookie, origin: base }, redirect: 'manual' })).status, 404);
