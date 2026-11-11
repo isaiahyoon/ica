@@ -14,6 +14,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: UMAMI_WEBSITE_ID
+        value: 613166b2-a380-4cb1-b99f-f25c54415fd9
       - key: ADMIN_PASSWORD
         sync: false
       - key: ADMIN_SESSION_SECRET

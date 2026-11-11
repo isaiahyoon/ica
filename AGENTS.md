@@ -61,7 +61,7 @@ For local sermon transcription, run `npm run transcribe:setup` once on an Apple 
 
 ## Deployment
 
-`render.yaml` configures a single Render Node web service and persistent disk. Set `ICA_DATA_DIR` and `ICA_UPLOAD_DIR` to directories on persistent storage when using another host. Keep one app instance unless sessions and login throttling are moved to shared storage.
+`render.yaml` configures a single Render Node web service, persistent disk, and the church's Umami Cloud website ID. Set `ICA_DATA_DIR` and `ICA_UPLOAD_DIR` to directories on persistent storage when using another host. Keep one app instance unless sessions and login throttling are moved to shared storage.
 
 ## Upload & security rules
 

@@ -34,7 +34,7 @@ ADMIN_PASSWORD='use-a-unique-passphrase-of-16-characters-or-more' npm start   # 
 
 If `ADMIN_PASSWORD` is not set in local development, a freshly generated password is printed in the terminal on each start. Production requires `ADMIN_PASSWORD`. Sign in at `/admin/login`.
 
-To enable Umami, set `UMAMI_WEBSITE_ID` to the website ID from your Umami project. Umami Cloud is the default; for a self-hosted instance, also set `UMAMI_SCRIPT_URL` to its HTTPS `script.js` URL. Tracking is disabled when the website ID is empty, and admin pages are never tracked.
+To enable Umami, set `UMAMI_WEBSITE_ID` to the website ID from your Umami project. The Render Blueprint configures the church's Umami Cloud website ID. Umami Cloud is the default; for a self-hosted instance, also set `UMAMI_SCRIPT_URL` to its HTTPS `script.js` URL. Tracking is disabled when the website ID is empty, and admin pages are never tracked.
 
 Other commands: `npm run dev` (auto-restart), `npm test`, `npm run reset-owner-2fa` (clears the owner's authenticator if their phone and recovery codes are both lost). Set `PORT` to change the port.
 
