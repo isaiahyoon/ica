@@ -11,10 +11,10 @@ import { createSermonPreviewRenderer } from '../lib/sermon-preview.js';
 
 const PASSWORD = 'correct horse battery staple';
 
-async function boot() {
+async function boot(options = {}) {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ica-'));
   await fs.mkdir(path.join(tmp, 'uploads/audio'), { recursive: true });
-  const app = createApp({ dataDir: path.join(tmp, 'data'), uploadDir: path.join(tmp, 'uploads'), password: PASSWORD });
+  const app = createApp({ dataDir: path.join(tmp, 'data'), uploadDir: path.join(tmp, 'uploads'), password: PASSWORD, ...options });
   const server = app.listen(0);
   const base = `http://localhost:${server.address().port}`;
   return {
@@ -97,6 +97,7 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(home, /<h1><span class="bilingual"><span lang="en">Immanuel Church of America<\/span><span lang="ko">미주 임마누엘 교회<\/span><\/span><\/h1>/);
   assert.doesNotMatch(home, /<p class="eyebrow" lang="ko">미주 임마누엘 교회<\/p>/);
   assert.match(home, /<link rel="icon" href="\/favicon\.png" type="image\/png">/);
+  assert.doesNotMatch(home, /data-website-id=/);
   assert.match(home, /<img class="brand-mark" src="\/favicon.png"/);
   assert.match(home, /Since 1994/);
   assert.equal((await fetch(`${base}/favicon.png`)).status, 200);
@@ -224,6 +225,26 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(loginPage, /<form method="post" action="\/admin\/login"/);
   assert.doesNotMatch(loginPage, /href="\/admin(?:\/login)?"/);
   assert.equal((await fetch(base + '/nope')).status, 404);
+});
+
+test('Umami tracks public rendered pages only when configured', async (t) => {
+  const { base, close } = await boot({
+    umamiWebsiteId: 'site-id" data-injected="no',
+    umamiScriptUrl: 'https://analytics.example/script.js',
+  });
+  t.after(close);
+
+  const home = await (await fetch(base)).text();
+  assert.match(home, /<script defer src="https:\/\/analytics\.example\/script\.js" data-website-id="site-id&quot; data-injected=&quot;no"><\/script>/);
+  assert.doesNotMatch(home, /data-injected="no"/);
+  assert.match(await (await fetch(`${base}/sermons`)).text(), /data-website-id=/);
+  assert.doesNotMatch(await (await fetch(`${base}/admin/login`)).text(), /data-website-id=/);
+
+  assert.throws(() => createApp({
+    password: PASSWORD,
+    umamiWebsiteId: 'site-id',
+    umamiScriptUrl: 'http://analytics.example/script.js',
+  }), /UMAMI_SCRIPT_URL must be a valid HTTPS URL/);
 });
 
 test('contact visit panel includes an accessible location diagram with south-side parking', async (t) => {

@@ -14,6 +14,7 @@ Public website: [immanuelchurchofamerica.org](https://immanuelchurchofamerica.or
 - **Contact** (`/contact`) — address with a Google Maps link, a bilingual location diagram showing the parking lot directly behind the building's south side, visitor details, and Instagram, with a link to worship times on About; includes a clickable 1 Corinthians 13:12 verse beside the church logo, with English KJV and Korean KRV links, and is linked from the welcome page.
 - **Admin** (`/admin`) — two-step sign-in (password, then authenticator code) for uploading, replacing, and removing sermon audio; sermon details have separate English and Korean speaker fields, one date and an optional service dropdown, and support multiline text. Existing custom service values are preserved when editing. Replacement keeps the existing sermon details and link; audio starts uploading as soon as it is selected, while sermon details can be entered for new sermons; the owner can add, reset, and remove other admins.
 - **Font study** (`/font-study.html`) — English and Korean typeface specimens with a live four-font serif/sans pairing preview.
+- **Analytics** — optional Umami page-view tracking on public server-rendered pages. Set `UMAMI_WEBSITE_ID`; `UMAMI_SCRIPT_URL` optionally selects an HTTPS script URL (defaults to Umami Cloud). Admin pages are excluded.
 
 ## Code layout
 
@@ -32,6 +33,8 @@ ADMIN_PASSWORD='use-a-unique-passphrase-of-16-characters-or-more' npm start   # 
 ```
 
 If `ADMIN_PASSWORD` is not set in local development, a freshly generated password is printed in the terminal on each start. Production requires `ADMIN_PASSWORD`. Sign in at `/admin/login`.
+
+To enable Umami, set `UMAMI_WEBSITE_ID` to the website ID from your Umami project. The Render Blueprint configures the church's Umami Cloud website ID. Umami Cloud is the default; for a self-hosted instance, also set `UMAMI_SCRIPT_URL` to its HTTPS `script.js` URL. Tracking is disabled when the website ID is empty, and admin pages are never tracked.
 
 Other commands: `npm run dev` (auto-restart), `npm test`, `npm run reset-owner-2fa` (clears the owner's authenticator if their phone and recovery codes are both lost). Set `PORT` to change the port.
 

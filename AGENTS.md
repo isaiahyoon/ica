@@ -7,7 +7,7 @@ Never go against Scripture, or regard it as false or untrustworthy. It will alwa
 Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Express, server-rendered HTML, no build step. Local prototype only — no domain/deployment concerns yet.
 
 - `server.js` — `createApp()` factory and routes (public pages, admin login, staged sermon uploads, deletes).
-- `lib/render.js` — all HTML templates. Always escape user content with `esc()`.
+- `lib/render.js` — all HTML templates. Always escape user content with `esc()`. Optional Umami tracking is configured with `UMAMI_WEBSITE_ID` and is omitted from admin pages.
 - `lib/sermon-preview.js` — dynamic 1200×630 sermon preview PNGs with title, Bible reference, and optional service label blended into the original artwork; Sharp/Resvg, shared CSS colors, bundled regular serif fonts in `assets/fonts/`, and a bounded cache. All three fields version the image URL.
 - `lib/auth.js` — admin password validation, revocable HttpOnly session cookie (pending vs. full stages), CSRF tokens, and bounded login throttling.
 - `lib/admins.js`, `lib/admin-routes.js`, `lib/totp.js` — two-step admin sign-in (password then TOTP/recovery code, no usernames), per-admin passwords and owner-managed admins; `scripts/reset-owner-2fa.js` clears the owner's authenticator.
@@ -61,7 +61,7 @@ For local sermon transcription, run `npm run transcribe:setup` once on an Apple 
 
 ## Deployment
 
-`render.yaml` configures a single Render Node web service and persistent disk. Set `ICA_DATA_DIR` and `ICA_UPLOAD_DIR` to directories on persistent storage when using another host. Keep one app instance unless sessions and login throttling are moved to shared storage.
+`render.yaml` configures a single Render Node web service, persistent disk, and the church's Umami Cloud website ID. Set `ICA_DATA_DIR` and `ICA_UPLOAD_DIR` to directories on persistent storage when using another host. Keep one app instance unless sessions and login throttling are moved to shared storage.
 
 ## Upload & security rules
 
