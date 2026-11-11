@@ -16,6 +16,23 @@ import { createSermonPreviewRenderer, sermonPreviewVersion } from './lib/sermon-
 const root = path.dirname(fileURLToPath(import.meta.url));
 
 const AUDIO = { exts: ['.mp3', '.m4a', '.aac', '.wav', '.ogg'], max: 200 * 1024 * 1024 };
+const DEFAULT_UMAMI_SCRIPT_URL = 'https://cloud.umami.is/script.js';
+
+function umamiConfig(websiteId, scriptUrl) {
+  const id = String(websiteId ?? '').trim();
+  if (!id) return undefined;
+
+  let url;
+  try {
+    url = new URL(scriptUrl);
+  } catch {
+    throw new Error('UMAMI_SCRIPT_URL must be a valid HTTPS URL.');
+  }
+  if (url.protocol !== 'https:' || url.username || url.password) {
+    throw new Error('UMAMI_SCRIPT_URL must be a valid HTTPS URL.');
+  }
+  return { websiteId: id, scriptUrl: url.href };
+}
 
 function uploader(dir, { exts, max }, mimePrefix, files) {
   return multer({
@@ -47,8 +64,11 @@ export function createApp({
   dataDir = process.env.ICA_DATA_DIR || path.join(root, 'data'),
   uploadDir = process.env.ICA_UPLOAD_DIR || path.join(root, 'uploads'),
   password,
+  umamiWebsiteId = process.env.UMAMI_WEBSITE_ID,
+  umamiScriptUrl = process.env.UMAMI_SCRIPT_URL || DEFAULT_UMAMI_SCRIPT_URL,
 }) {
   auth.assertAdminPassword(password);
+  const analytics = umamiConfig(umamiWebsiteId, umamiScriptUrl);
   const app = express();
   const proxyHops = process.env.TRUST_PROXY_HOPS;
   if (proxyHops !== undefined) {
@@ -84,10 +104,20 @@ export function createApp({
   app.use(express.static(pub));
   app.use('/uploads/audio', express.static(audioDir, { index: false, dotfiles: 'deny' }));
 
+  const renderPage = (req, opts) => {
+    const admin = opts.admin ?? auth.isAdmin(req);
+    return view.layout({
+      ...opts,
+      admin,
+      path: opts.path ?? req.path,
+      analytics: admin || req.path.startsWith('/admin') ? undefined : analytics,
+    });
+  };
+
   const page = (req, res, opts) => {
     const admin = auth.isAdmin(req);
     if (admin) res.set('Cache-Control', 'no-store');
-    res.send(view.layout({ ...opts, admin, path: req.path }));
+    res.send(renderPage(req, { ...opts, admin }));
   };
 
   app.get('/', (req, res) => page(req, res, { active: 'home', body: view.homePage() }));
@@ -130,7 +160,7 @@ export function createApp({
   app.get('/sermons/:id', async (req, res) => {
     const sermon = (await store.read('sermons')).find((item) => item.id === req.params.id);
     if (!sermon) {
-      return res.status(404).send(view.layout({
+      return res.status(404).send(renderPage(req, {
         title: 'Not found', admin: auth.isAdmin(req),
         path: req.path,
         body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }),
@@ -164,7 +194,7 @@ export function createApp({
     const sermons = await store.read('sermons');
     if (auth.isOwner(req)) extra = { ...extra, admins: await admins.list() };
     res.set('Cache-Control', 'no-store');
-    res.status(status).send(view.layout({
+    res.status(status).send(renderPage(req, {
       title: 'Admin', active: 'admin', admin: true,
       body: view.adminPage({ sermons, csrfToken: auth.csrfToken(req), ...extra }),
     }));
@@ -295,7 +325,7 @@ export function createApp({
     (async () => {
       const current = (await store.read('sermons')).find((s) => s.id === req.params.id);
       if (!current) {
-        return res.status(404).send(view.layout({
+        return res.status(404).send(renderPage(req, {
           title: 'Not found', admin: true, path: req.path,
           body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }),
         }));
@@ -328,7 +358,7 @@ export function createApp({
       }
       if (!found) {
         await removeFiles(audioDir, [filename]);
-        return res.status(404).send(view.layout({
+        return res.status(404).send(renderPage(req, {
           title: 'Not found', admin: true, path: req.path,
           body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }),
         }));
@@ -351,7 +381,7 @@ export function createApp({
         description: clean(req.body.description, 1000),
       };
     }));
-    if (!found) return res.status(next.some((s) => s.id === req.params.id) ? 400 : 404).send(view.layout({ title: 'Not found', admin: true, body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }) }));
+    if (!found) return res.status(next.some((s) => s.id === req.params.id) ? 400 : 404).send(renderPage(req, { title: 'Not found', admin: true, body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }) }));
     // The list sorts by date, so send the admin to the page where the sermon now sits.
     const index = sortSermons(next).findIndex((s) => s.id === req.params.id);
     const pageNo = Math.floor(index / SERMONS_PER_PAGE) + 1;
@@ -369,7 +399,7 @@ export function createApp({
   };
   app.post('/admin/sermons/:id/delete', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, remove('sermons', audioDir, '/sermons'));
 
-  app.use((req, res) => res.status(404).send(view.layout({
+  app.use((req, res) => res.status(404).send(renderPage(req, {
     title: 'Not found', admin: auth.isAdmin(req),
     path: req.path,
     body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }),
@@ -377,7 +407,7 @@ export function createApp({
 
   app.use((err, req, res, _next) => {
     console.error(err);
-    res.status(500).send(view.layout({
+    res.status(500).send(renderPage(req, {
       title: 'Error', admin: auth.isAdmin(req),
       path: req.path,
       body: view.messagePage({ title: 'Something went wrong', text: 'Please try again in a moment.' }),
