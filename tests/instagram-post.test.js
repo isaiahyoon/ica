@@ -81,7 +81,9 @@ test('captions use the verbatim overview with bilingual separation and a link-in
   for (const description of ['English only.', '한국어만 있습니다.', 'English.\n\n한국어.']) {
     assert.equal(postCaption(description), `${description}\n\n${invitation}`);
   }
-  for (const description of [undefined, null, '', '   ', 42, 'x'.repeat(1001)]) {
+  const maximumOverview = 'x'.repeat(10000);
+  assert.equal(postCaption(maximumOverview), `${maximumOverview}\n\n${invitation}`);
+  for (const description of [undefined, null, '', '   ', 42, 'x'.repeat(10001)]) {
     assert.throws(() => postCaption(description), /Sermon Overview/);
   }
 });
