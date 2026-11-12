@@ -100,7 +100,7 @@ export function createApp({
     }
     next();
   });
-  app.use(express.urlencoded({ extended: false, limit: '10kb', parameterLimit: 30 }));
+  app.use(express.urlencoded({ extended: false, limit: '128kb', parameterLimit: 30 }));
   app.use(express.static(pub));
   app.use('/uploads/audio', express.static(audioDir, { index: false, dotfiles: 'deny' }));
 
@@ -315,7 +315,7 @@ export function createApp({
       await store.update('sermons', (list) => [...list, {
         id: crypto.randomUUID(), title, date,
         ...speakerFields(req.body), service: clean(req.body.service, 100), scripture: clean(req.body.scripture, 100),
-        description: clean(req.body.description, 1000),
+        description: clean(req.body.description, 10000),
         file: filename, createdAt: new Date().toISOString(),
       }]);
       res.redirect('/admin?notice=' + encodeURIComponent('Sermon uploaded.'));
@@ -378,7 +378,7 @@ export function createApp({
       return {
         ...s, title, date,
         ...speakerFields(req.body), service: clean(req.body.service, 100), scripture: clean(req.body.scripture, 100),
-        description: clean(req.body.description, 1000),
+        description: clean(req.body.description, 10000),
       };
     }));
     if (!found) return res.status(next.some((s) => s.id === req.params.id) ? 400 : 404).send(renderPage(req, { title: 'Not found', admin: true, body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }) }));
