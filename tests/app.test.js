@@ -795,6 +795,43 @@ test('admin routes require sign in; missing and incorrect passwords are rejected
   }
 });
 
+test('sermon overviews accept up to 10000 characters on upload and edit', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const csrf = await csrfToken(base, cookie);
+  const overview = '설'.repeat(10000);
+  const admin = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
+  assert.match(admin, /<textarea name="description" rows="3" maxlength="10000"/);
+
+  const upload = new FormData();
+  for (const [name, value] of Object.entries({
+    title: 'Long overview', speakerEn: '', speakerKo: '', service: '', date: '', scripture: '', description: overview,
+  })) upload.set(name, value);
+  upload.set('_csrf', csrf);
+  upload.set('audio', new Blob(['audio'], { type: 'audio/mpeg' }), 'sermon.mp3');
+  const response = await fetch(`${base}/admin/sermons`, {
+    method: 'POST', body: upload, headers: { cookie, origin: base }, redirect: 'manual',
+  });
+  assert.equal(response.status, 302);
+  const [created] = JSON.parse(await fs.readFile(path.join(dataDir, 'sermons.json'), 'utf8'));
+  assert.equal(created.description, overview);
+
+  const editedOverview = `${overview}x`;
+  const edit = await fetch(`${base}/admin/sermons/${created.id}/edit`, {
+    method: 'POST', headers: { ...FORM(base), cookie }, redirect: 'manual',
+    body: new URLSearchParams({
+      _csrf: csrf, title: created.title, speakerEn: '', speakerKo: '', service: '', date: '',
+      scripture: '', description: editedOverview,
+    }),
+  });
+  assert.equal(edit.status, 302);
+  const [updated] = JSON.parse(await fs.readFile(path.join(dataDir, 'sermons.json'), 'utf8'));
+  assert.equal(updated.description, overview);
+  const sermonPage = await (await fetch(`${base}/sermons/${created.id}`, { headers: { cookie } })).text();
+  assert.match(sermonPage, /<textarea name="description" rows="3" maxlength="10000"/);
+});
+
 test('admin sessions use hardened cookies, require CSRF tokens, and revoke on logout', async (t) => {
   const { base, close } = await boot();
   t.after(close);
