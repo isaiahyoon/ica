@@ -5,3 +5,4 @@ uploads/
 .DS_Store
 .venv-transcribe/
 __pycache__/
+/Gallery Photo Converter.app/
