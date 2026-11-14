@@ -8,6 +8,7 @@ import * as auth from './lib/auth.js';
 import { createStore } from './lib/store.js';
 import { createAdmins } from './lib/admins.js';
 import { mountAdminAuth } from './lib/admin-routes.js';
+import { mountGallery } from './lib/gallery-routes.js';
 import * as view from './lib/render.js';
 import { formatScriptureReference } from './lib/scripture-links.js';
 import { splitBilingual } from './lib/sermon-metadata.js';
@@ -203,6 +204,8 @@ export function createApp({
   mountAdminAuth({ app, admins, loginLimiter, adminView, ownerPassword: password });
 
   app.get('/admin', auth.requireAdmin, (req, res) => adminView(req, res, 200, { notice: req.query.notice }));
+
+  mountGallery({ app, store, uploadDir, page, renderPage });
 
   // Wrap multer so upload errors (size, type) render a friendly message.
   const handleUpload = (mw) => (req, res, next) =>

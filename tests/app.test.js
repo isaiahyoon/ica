@@ -89,6 +89,549 @@ async function csrfToken(base, cookie) {
   return html.match(/name="_csrf" value="([^"]+)"/)[1];
 }
 
+async function uploadGallery(base, cookie, token, files) {
+  const body = new FormData();
+  for (const file of files) {
+    body.append('photos', new Blob([file.data], { type: file.type ?? 'image/png' }), file.name ?? 'photo.png');
+  }
+  return fetch(`${base}/admin/gallery/uploads`, {
+    method: 'POST', redirect: 'manual',
+    headers: { cookie, origin: base, 'x-csrf-token': token, accept: 'application/json' }, body,
+  });
+}
+
+async function publishGallery(base, cookie, token, photos) {
+  return fetch(`${base}/admin/gallery/publish`, {
+    method: 'POST', redirect: 'manual',
+    headers: { ...FORM(base), cookie, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ _csrf: token, photos }),
+  });
+}
+
+async function galleryOrder(base, cookie) {
+  const response = await fetch(`${base}/admin/gallery/reorder`, { headers: { cookie } });
+  const html = await response.text();
+  return {
+    response, html,
+    revision: html.match(/name="revision" value="([^"]+)"/)?.[1],
+    ids: [...html.matchAll(/data-order-id="([^"]+)"/g)].map((match) => match[1]),
+  };
+}
+
+async function saveGalleryOrder(base, cookie, token, revision, ids, origin = base) {
+  return fetch(`${base}/admin/gallery/order`, {
+    method: 'POST', redirect: 'manual',
+    headers: { cookie, origin, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ _csrf: token, revision, ids }),
+  });
+}
+
+function galleryRecords(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `photo-${index + 1}`, file: `photo-${index + 1}.webp`, thumbnail: `photo-${index + 1}-thumb.webp`,
+    state: 'published', captionEn: `Photo ${index + 1}`, captionKo: '교회 사진', width: 20, height: 10,
+    publishedAt: new Date(Date.UTC(2026, 10, 14, 0, 0, index)).toISOString(),
+  }));
+}
+
+test('admins reorder all published photos while preserving metadata, drafts, pagination, and stable links', async (t) => {
+  const { base, close, dataDir } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const token = await csrfToken(base, cookie);
+  const original = galleryRecords(27);
+  const draft = { ...original[0], id: 'private-draft', state: 'draft', sessionId: 'other-session', expiresAt: Date.now() + 3600000 };
+  await fs.writeFile(path.join(dataDir, 'gallery.json'), JSON.stringify([...original, draft]));
+  const editor = await galleryOrder(base, cookie);
+  assert.equal(editor.response.status, 200);
+  assert.equal(editor.response.headers.get('cache-control'), 'no-store');
+  assert.equal(editor.ids.length, 27);
+  assert.equal(editor.ids[0], original[26].id);
+  assert.doesNotMatch(editor.html, /data-order-id="private-draft"|name="captionEn"/);
+  assert.match(editor.html, /data-order-drag/);
+  assert.match(editor.html, /data-order-position/);
+  assert.equal((await fetch(`${base}/admin/gallery/reorder`, { redirect: 'manual' })).status, 302);
+  const desired = original.map((photo) => photo.id);
+  assert.equal((await saveGalleryOrder(base, '', token, editor.revision, desired)).status, 302);
+  assert.equal((await saveGalleryOrder(base, cookie, 'bad', editor.revision, desired)).status, 403);
+  assert.equal((await saveGalleryOrder(base, cookie, token, editor.revision, desired, 'https://example.invalid')).status, 403);
+  for (const invalid of [desired.slice(1), [...desired, 'unknown'], [desired[0], ...desired.slice(0, -1)], [...desired.slice(0, -1), draft.id]]) {
+    assert.equal((await saveGalleryOrder(base, cookie, token, editor.revision, invalid)).status, 400);
+  }
+  assert.equal((await saveGalleryOrder(base, cookie, token, editor.revision, desired)).status, 200);
+  const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
+  assert.deepEqual(saved, [...original.map((photo, index) => ({ ...photo, order: index })), draft]);
+  const publicHtml = await (await fetch(`${base}/gallery`)).text();
+  const firstPageIds = [...publicHtml.matchAll(/data-photo-id="([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(firstPageIds, desired.slice(0, 24));
+  const link = await (await fetch(`${base}/gallery/${original[26].id}`)).text();
+  assert.match(link, /data-page="2"/);
+  assert.match(link, /data-open-photo="photo-27"/);
+  assert.equal((await saveGalleryOrder(base, cookie, token, editor.revision, editor.ids)).status, 409);
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json'))), saved);
+});
+
+test('gallery ordering detects concurrent changes and new batches prepend without losing the saved order', async (t) => {
+  const { base, close, dataDir } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const token = await csrfToken(base, cookie);
+  await fs.writeFile(path.join(dataDir, 'gallery.json'), JSON.stringify(galleryRecords(3)));
+  const editor = await galleryOrder(base, cookie);
+  const responses = await Promise.all([
+    saveGalleryOrder(base, cookie, token, editor.revision, ['photo-2', 'photo-1', 'photo-3']),
+    saveGalleryOrder(base, cookie, token, editor.revision, ['photo-1', 'photo-3', 'photo-2']),
+  ]);
+  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
+  const current = await galleryOrder(base, cookie);
+  const edit = await fetch(`${base}/admin/gallery/photo-1/edit`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie },
+    body: new URLSearchParams({ _csrf: token, captionEn: 'Edited during reordering', captionKo: '수정된 설명' }),
+  });
+  assert.equal(edit.status, 302);
+  assert.equal((await saveGalleryOrder(base, cookie, token, current.revision, current.ids)).status, 409);
+  const beforeBatch = await galleryOrder(base, cookie);
+  const data = await sharp({ create: { width: 20, height: 10, channels: 3, background: '#223b55' } }).png().toBuffer();
+  const uploaded = await uploadGallery(base, cookie, token, [{ data }, { data }]);
+  const newPhotos = (await uploaded.json()).photos;
+  assert.equal((await galleryOrder(base, cookie)).revision, beforeBatch.revision, 'private uploads do not conflict');
+  assert.equal((await publishGallery(base, cookie, token, newPhotos.map((photo) => ({ id: photo.id })))).status, 200);
+  assert.equal((await saveGalleryOrder(base, cookie, token, beforeBatch.revision, beforeBatch.ids)).status, 409);
+  const afterBatch = await galleryOrder(base, cookie);
+  assert.deepEqual(afterBatch.ids, [...newPhotos.map((photo) => photo.id), ...beforeBatch.ids]);
+  const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
+  assert.equal(saved.find((photo) => photo.id === 'photo-1').captionEn, 'Edited during reordering');
+});
+
+async function galleryViewerHarness({ fetchPage, hash = '', openPhotoId = '' } = {}) {
+  const source = await fs.readFile(new URL('../public/scripts/gallery.js', import.meta.url), 'utf8');
+  const viewerEvents = new Map();
+  const image = { removeAttribute(name) { delete this[name]; } };
+  const previous = { events: new Map(), addEventListener(name, fn) { this.events.set(name, fn); } };
+  const next = { events: new Map(), addEventListener(name, fn) { this.events.set(name, fn); } };
+  const status = {};
+  let shownCaption;
+  const makeLink = (id) => {
+    const figure = {
+      id: `gallery-photo-${id}`,
+      scrollIntoView(options) { this.scrolled = options.block; },
+      querySelector() { return { cloneNode() { return { id }; } }; },
+    };
+    return {
+      href: `/gallery/${id}`, dataset: { photoId: String(id), galleryImage: `/gallery/photos/${id}/image.webp` }, events: new Map(),
+      addEventListener(name, fn) { this.events.set(name, fn); },
+      querySelector() { return { alt: `Photo ${id}` }; },
+      closest() { return figure; },
+      focus() { this.focused = true; },
+    };
+  };
+  const pageLinks = new Map([[1, [makeLink(1), makeLink(2)]], [2, [makeLink(3), makeLink(4)]], [3, [makeLink(5)]]]);
+  const selectors = {
+    img: image, '[data-gallery-previous]': previous, '[data-gallery-next]': next,
+    '[data-gallery-viewer-status]': status,
+    '.gallery-viewer-caption': { replaceChildren(caption) { shownCaption = caption; } },
+  };
+  const viewer = {
+    open: false, dataset: { page: '1', pages: '3', openPhoto: openPhotoId },
+    showModal() { this.open = true; },
+    close() { this.open = false; viewerEvents.get('close')(); },
+    addEventListener(name, fn) { viewerEvents.set(name, fn); },
+    querySelector(selector) { return selectors[selector]; },
+    getBoundingClientRect() { return { left: 100, right: 500, top: 100, bottom: 500 }; },
+  };
+  const requests = [];
+  const windowEvents = new Map();
+  const locations = [];
+  const history = [];
+  runInNewContext(source, {
+    document: { querySelector() { return viewer; }, querySelectorAll() { return pageLinks.get(1); } },
+    window: {
+      location: { hash, assign(url) { locations.push(url); } },
+      history: { replaceState(_state, _title, url) { history.push(url); } },
+      addEventListener(name, fn) { windowEvents.set(name, fn); },
+    },
+    AbortController,
+    fetch: async (url, options) => {
+      requests.push(url);
+      return fetchPage ? fetchPage(url, options) : { ok: true, text: async () => url.slice(-1) };
+    },
+    DOMParser: class {
+      parseFromString(html) {
+        return {
+          querySelector() { return { dataset: { page: html } }; },
+          querySelectorAll() { return pageLinks.get(Number(html)) ?? []; },
+        };
+      }
+    },
+  });
+  return {
+    viewer, image, previous, next, status, requests, viewerEvents, pageLinks, locations, windowEvents, history,
+    get caption() { return shownCaption; },
+  };
+}
+
+test('gallery viewer opens the selected image and captions and closes with Escape', async () => {
+  const state = await galleryViewerHarness();
+  const { viewer, image, viewerEvents } = state;
+  const link = state.pageLinks.get(1)[0];
+  let prevented = false;
+  const click = { preventDefault() { prevented = true; } };
+  link.events.get('click')({ ...click, ctrlKey: true });
+  assert.equal(viewer.open, false);
+  assert.equal(prevented, false);
+  link.events.get('click')(click);
+  assert.equal(viewer.open, true);
+  assert.equal(image.src, link.dataset.galleryImage);
+  assert.equal(image.alt, 'Photo 1');
+  assert.equal(state.caption.id, 1);
+  assert.equal(prevented, true);
+  viewerEvents.get('keydown')({ key: 'Tab' });
+  assert.equal(viewer.open, true);
+  prevented = false;
+  viewerEvents.get('keydown')({ key: 'Escape', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(viewer.open, false);
+  assert.equal(image.src, undefined);
+});
+
+test('gallery viewer arrow buttons and keys cross pages in both directions and stop at gallery boundaries', async () => {
+  const state = await galleryViewerHarness();
+  const { previous, next, viewerEvents, image } = state;
+  state.pageLinks.get(1)[0].events.get('click')({ preventDefault() {} });
+  assert.equal(previous.disabled, true);
+  await previous.events.get('click')();
+  assert.equal(image.alt, 'Photo 1');
+  await viewerEvents.get('keydown')({ key: 'ArrowRight', preventDefault() {} });
+  assert.equal(image.alt, 'Photo 2');
+  await next.events.get('click')();
+  assert.equal(image.alt, 'Photo 3');
+  assert.equal(state.caption.id, 3);
+  assert.match(state.status.textContent, /Page 2\/3/);
+  await next.events.get('click')();
+  await next.events.get('click')();
+  assert.equal(image.alt, 'Photo 5');
+  assert.equal(next.disabled, true);
+  await next.events.get('click')();
+  assert.equal(image.alt, 'Photo 5');
+  await viewerEvents.get('keydown')({ key: 'ArrowLeft', preventDefault() {} });
+  assert.equal(image.alt, 'Photo 4');
+  await previous.events.get('click')();
+  await previous.events.get('click')();
+  assert.equal(image.alt, 'Photo 2');
+  assert.deepEqual(state.requests, ['/gallery?page=2', '/gallery?page=3']);
+});
+
+test('gallery viewer reports loading errors, allows retry, and ignores pending navigation after closing', async () => {
+  let succeed = false;
+  const state = await galleryViewerHarness({
+    fetchPage: async () => ({ ok: succeed, text: async () => '2' }),
+  });
+  state.pageLinks.get(1)[1].events.get('click')({ preventDefault() {} });
+  await state.next.events.get('click')();
+  assert.match(state.status.textContent, /Could not load photos/);
+  assert.equal(state.image.alt, 'Photo 2');
+  assert.equal(state.next.disabled, false);
+  succeed = true;
+  await state.next.events.get('click')();
+  assert.equal(state.image.alt, 'Photo 3');
+
+  let resolve;
+  let signal;
+  const pending = await galleryViewerHarness({
+    fetchPage: (_url, options) => {
+      signal = options.signal;
+      return new Promise((done) => { resolve = done; });
+    },
+  });
+  pending.pageLinks.get(1)[1].events.get('click')({ preventDefault() {} });
+  const loading = pending.next.events.get('click')();
+  assert.equal(pending.next.disabled, true);
+  pending.viewer.close();
+  assert.equal(signal.aborted, true);
+  pending.pageLinks.get(1)[0].events.get('click')({ preventDefault() {} });
+  resolve({ ok: true, text: async () => '2' });
+  await loading;
+  assert.equal(pending.image.alt, 'Photo 1');
+  assert.equal(pending.next.disabled, false);
+});
+
+test('gallery backdrop closes only for outside clicks and returns to the last viewed photo', async () => {
+  const state = await galleryViewerHarness();
+  const { viewer, viewerEvents } = state;
+  state.pageLinks.get(1)[0].events.get('click')({ preventDefault() {} });
+  const inside = { target: viewer, clientX: 200, clientY: 200 };
+  const outside = { target: viewer, clientX: 10, clientY: 10 };
+  viewerEvents.get('pointerdown')(inside);
+  viewerEvents.get('click')(inside);
+  assert.equal(viewer.open, true);
+  viewerEvents.get('pointerdown')(inside);
+  viewerEvents.get('click')(outside);
+  assert.equal(viewer.open, true);
+  await state.next.events.get('click')();
+  viewerEvents.get('pointerdown')(outside);
+  viewerEvents.get('click')(outside);
+  assert.equal(viewer.open, false);
+  const lastPhoto = state.pageLinks.get(1)[1];
+  assert.equal(lastPhoto.focused, true);
+  assert.equal(lastPhoto.closest().scrolled, 'center');
+  assert.deepEqual(state.locations, []);
+});
+
+test('closing a viewer on another page returns to that page and restores photo focus from the fragment', async () => {
+  const state = await galleryViewerHarness();
+  state.pageLinks.get(1)[1].events.get('click')({ preventDefault() {} });
+  await state.next.events.get('click')();
+  state.viewer.close();
+  assert.deepEqual(state.locations, ['/gallery?page=2#gallery-photo-3']);
+  const returned = await galleryViewerHarness({ hash: '#gallery-photo-2' });
+  returned.windowEvents.get('pageshow')();
+  assert.equal(returned.pageLinks.get(1)[1].focused, true);
+  assert.equal(returned.pageLinks.get(1)[1].closest().scrolled, 'center');
+  assert.equal(returned.viewer.open, false);
+});
+
+test('individual photo links open the viewer and browsing updates the shareable URL without reopening on close', async () => {
+  const state = await galleryViewerHarness({ openPhotoId: '2' });
+  assert.equal(state.viewer.open, true);
+  assert.equal(state.image.alt, 'Photo 2');
+  assert.equal(state.history.at(-1), '/gallery/2');
+  await state.previous.events.get('click')();
+  assert.equal(state.image.alt, 'Photo 1');
+  assert.equal(state.history.at(-1), '/gallery/1');
+  state.viewer.close();
+  assert.equal(state.history.at(-1), '/gallery#gallery-photo-1');
+});
+
+test('gallery previews stay private, publishes captions, and edits and replaces without losing metadata', async (t) => {
+  const { base, close, dataDir, uploadDir } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const token = await csrfToken(base, cookie);
+  const data = await sharp({ create: { width: 2500, height: 1250, channels: 3, background: '#223b55' } }).png().toBuffer();
+  const empty = await (await fetch(`${base}/gallery`)).text();
+  assert.match(empty, /No photos have been shared/);
+  assert.match(empty, /href="\/gallery"/);
+  assert.match(await (await fetch(`${base}/admin`, { headers: { cookie } })).text(), /href="\/admin\/gallery"/);
+  const uploaded = await uploadGallery(base, cookie, token, [{ data }, { data }]);
+  assert.equal(uploaded.status, 201);
+  const { photos: drafts } = await uploaded.json();
+  assert.equal(drafts.length, 2);
+  const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
+  assert.equal(saved[0].width, 2048);
+  assert.equal(saved[0].height, 1024);
+  assert.ok((await fs.stat(path.join(uploadDir, 'gallery', saved[0].file))).size < data.length);
+  assert.equal((await fetch(`${base}${drafts[0].preview}`, { redirect: 'manual' })).status, 302);
+  assert.equal((await fetch(`${base}/gallery/photos/${saved[0].id}/${saved[0].file}`)).status, 404);
+  assert.equal((await fetch(`${base}/gallery/${saved[0].id}`)).status, 404);
+  assert.equal((await fetch(`${base}/uploads/gallery/${saved[0].file}`)).status, 404);
+  const preview = await fetch(`${base}${drafts[0].preview}`, { headers: { cookie } });
+  assert.equal(preview.status, 200);
+  assert.equal(preview.headers.get('cache-control'), 'no-store');
+  const previewInfo = await sharp(Buffer.from(await preview.arrayBuffer())).metadata();
+  assert.equal(previewInfo.width, 480);
+  const admin = await (await fetch(`${base}/admin/gallery`, { headers: { cookie } })).text();
+  assert.match(admin, new RegExp(`data-draft-id="${drafts[0].id}"`));
+  assert.match(admin, /data-gallery-files[^>]*|multiple data-gallery-files/);
+  assert.match(admin, /name="captionEn"/);
+  assert.match(admin, /name="captionKo"/);
+
+  assert.equal((await publishGallery(base, cookie, token, [{ id: drafts[0].id, captionEn: 'a'.repeat(1001) }])).status, 400);
+  assert.equal((await publishGallery(base, cookie, token, [{ id: drafts[0].id }, { id: drafts[0].id }])).status, 400);
+  const details = [
+    { id: drafts[0].id, captionEn: 'Church family\n<script>alert(1)</script>', captionKo: '교회 가족\n함께' },
+    { id: drafts[1].id },
+  ];
+  assert.equal((await publishGallery(base, cookie, token, details)).status, 200);
+  const gallery = await (await fetch(`${base}/gallery`)).text();
+  assert.match(gallery, /Church family\n&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(gallery, /교회 가족\n함께/);
+  assert.doesNotMatch(gallery, /<script>alert/);
+  assert.match(gallery, /<dialog[^>]*aria-label="Photo viewer/);
+  const photoUrl = `${base}/gallery/photos/${saved[0].id}/${saved[0].file}`;
+  const full = await fetch(photoUrl);
+  assert.equal(full.status, 200);
+  assert.match(full.headers.get('content-type'), /image\/webp/);
+  assert.equal((await fetch(`${base}${drafts[0].preview}`, { headers: { cookie } })).status, 404);
+  assert.equal((await publishGallery(base, cookie, token, details)).status, 400);
+
+  const edit = await fetch(`${base}/admin/gallery/${saved[0].id}/edit`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie },
+    body: new URLSearchParams({ _csrf: token, captionEn: 'Updated\ncaption', captionKo: '수정된 설명' }),
+  });
+  assert.equal(edit.status, 302);
+  assert.match(await (await fetch(`${base}/gallery`)).text(), /Updated\ncaption/);
+  const broken = await uploadGallery(base, cookie, token, [{ data: Buffer.from('not an image') }]);
+  assert.equal(broken.status, 400);
+  assert.equal((await fetch(photoUrl)).status, 200);
+  const replacement = await uploadGallery(base, cookie, token, [{ data }]);
+  const draft = (await replacement.json()).photos[0];
+  const replace = await fetch(`${base}/admin/gallery/${saved[0].id}/replace`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie },
+    body: new URLSearchParams({ _csrf: token, stagedPhoto: draft.id }),
+  });
+  assert.equal(replace.status, 302);
+  const after = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
+  assert.equal(after.length, 2);
+  const replaced = after.find((photo) => photo.id === saved[0].id);
+  assert.equal(replaced.captionEn, 'Updated\ncaption');
+  assert.equal(replaced.captionKo, '수정된 설명');
+  assert.equal(replaced.publishedAt, after[1].publishedAt);
+  assert.notEqual(replaced.file, saved[0].file);
+  assert.equal((await fetch(photoUrl)).status, 404);
+  assert.equal((await fetch(`${base}/gallery/photos/${replaced.id}/${replaced.file}`)).status, 200);
+  const linked = await (await fetch(`${base}/gallery/${replaced.id}`)).text();
+  assert.match(linked, new RegExp(`data-open-photo="${replaced.id}"`));
+  assert.match(linked, new RegExp(`data-gallery-image="/gallery/photos/${replaced.id}/${replaced.file}"`));
+  await assert.rejects(fs.stat(path.join(uploadDir, 'gallery', saved[0].file)), { code: 'ENOENT' });
+  assert.equal((await fs.readdir(path.join(uploadDir, 'gallery-staging'))).length, 0);
+  assert.equal((await fs.readdir(path.join(uploadDir, 'gallery'))).length, 4);
+
+  const reopened = createApp({ dataDir, uploadDir, password: PASSWORD }).listen(0);
+  t.after(async () => {
+    const done = new Promise((resolve) => reopened.close(resolve));
+    reopened.closeAllConnections();
+    await done;
+  });
+  const restored = await (await fetch(`http://localhost:${reopened.address().port}/gallery`)).text();
+  assert.match(restored, /Updated\ncaption/);
+  assert.match(restored, /수정된 설명/);
+});
+
+test('gallery accepts HEIC and HEIF photos, compresses them, and rejects invalid or oversized images', async (t) => {
+  const { base, close, dataDir, uploadDir } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const token = await csrfToken(base, cookie);
+  const heic = Buffer.from('AAAAJGZ0eXBoZWljAAAAAG1pZjFNaVBybWlhZk1pSEJoZWljAAABw21ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAHBpY3QAAAAAAAAAAAAAAAAAAAAAJGRpbmYAAAAcZHJlZgAAAAAAAAABAAAADHVybCAAAAABAAAADnBpdG0AAAAAAAEAAAA4aWluZgAAAAAAAgAAABVpbmZlAgAAAAABAABodmMxAAAAABVpbmZlAgAAAQACAABFeGlmAAAAABppcmVmAAAAAAAAAA5jZHNjAAIAAQABAAAA5mlwcnAAAADFaXBjbwAAABNjb2xybmNseAACAAIABoAAAAAMY2xsaQDLAEAAAAAUaXNwZQAAAAAAAAAYAAAAEAAAAAlpcm90AAAAABBwaXhpAAAAAAMICAgAAABxaHZjQwEDcAAAALAAAAAAAB7wAPz9+PgAAAsDoAABABdAAQwB//8DcAAAAwCwAAADAAADAB5wJKEAAQAjQgEBA3AAAAMAsAAAAwAAAwAeoBQgQcCLDOIe5FlU3AgIGAKiAAEACUQBwGFyyEBTJAAAABlpcG1hAAAAAAAAAAEAAQaBAgOEBYYAAAAsaWxvYwAAAABEAAACAAEAAAABAAACQwAAADwAAgAAAAEAAAH3AAAATAAAAAFtZGF0AAAAAAAAAJgAAAAGRXhpZgAATU0AKgAAAAgAAwEaAAUAAAABAAAAMgEbAAUAAAABAAAAOgEoAAMAAAABAAIAAAAAAAAAAAAZAAAAAQAAABkAAAABAAAAOCgBr6LyRoF8//50Mev6I//5Pz1X/8lh//vu5/Ng90yyZ/og+cI557vn7lrup8IvYV+CtwhJsiuA', 'base64');
+  for (const [name, type] of [['photo.HEIC', 'image/heic'], ['photo.heif', 'image/heif'], ['photo.heic', 'application/octet-stream']]) {
+    const response = await uploadGallery(base, cookie, token, [{ data: heic, name, type }]);
+    assert.equal(response.status, 201, await response.clone().text());
+  }
+  const rotated = Buffer.from(heic);
+  rotated[rotated.indexOf('irot') + 4] = 3;
+  assert.equal((await uploadGallery(base, cookie, token, [{ data: rotated, name: 'rotated.heic', type: 'image/heic' }])).status, 201);
+  const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
+  assert.equal(saved.length, 4);
+  for (const [index, photo] of saved.entries()) {
+    const output = await fs.readFile(path.join(uploadDir, 'gallery', photo.file));
+    const metadata = await sharp(output).metadata();
+    assert.equal(metadata.format, 'webp');
+    assert.equal(metadata.width, index === 3 ? 16 : 24);
+    assert.equal(metadata.height, index === 3 ? 24 : 16);
+    assert.ok(output.length < heic.length);
+    assert.equal(metadata.exif, undefined);
+  }
+  const html = await (await fetch(`${base}/admin/gallery`, { headers: { cookie } })).text();
+  assert.match(html, /accept="[^"]*\.heic[^"]*\.heif/);
+  assert.equal((await publishGallery(base, cookie, token, [{ id: saved[0].id, captionEn: 'Family' }])).status, 200);
+  const replacementForm = await (await fetch(`${base}/admin/gallery`, { headers: { cookie } })).text();
+  assert.equal((replacementForm.match(/accept="[^"]*\.heic[^"]*\.heif/g) ?? []).length, 2);
+  const replace = await fetch(`${base}/admin/gallery/${saved[0].id}/replace`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie },
+    body: new URLSearchParams({ _csrf: token, stagedPhoto: saved[1].id }),
+  });
+  assert.equal(replace.status, 302);
+  const replaced = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json'))).find((photo) => photo.id === saved[0].id);
+  assert.equal(replaced.captionEn, 'Family');
+  assert.notEqual(replaced.file, saved[0].file);
+  const png = await sharp({ create: { width: 10, height: 10, channels: 3, background: 'red' } }).png().toBuffer();
+  for (const file of [
+    { data: png, name: 'fake.heic', type: 'image/heic' },
+    { data: Buffer.from('broken'), name: 'broken.heif', type: 'image/heif' },
+    { data: heic.subarray(0, heic.length - 20), name: 'truncated.heic', type: 'image/heic' },
+    { data: heic, name: 'photo.heic', type: 'image/png' },
+  ]) {
+    assert.equal((await uploadGallery(base, cookie, token, [file])).status, 400);
+  }
+  const oversized = Buffer.from(heic);
+  const dimensions = oversized.indexOf('ispe');
+  oversized.writeUInt32BE(10_000, dimensions + 8);
+  oversized.writeUInt32BE(10_000, dimensions + 12);
+  assert.equal((await uploadGallery(base, cookie, token, [{ data: oversized, name: 'large.heic', type: 'image/heic' }])).status, 400);
+  assert.deepEqual(await fs.readdir(path.join(uploadDir, 'gallery-staging')), []);
+});
+
+test('gallery enforces exactly 100 uploads and accepts a full captioned batch beyond ordinary form limits', async (t) => {
+  const { base, close, dataDir, uploadDir } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const token = await csrfToken(base, cookie);
+  const data = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#223b55' } }).png().toBuffer();
+  const file = { data };
+  assert.equal((await uploadGallery(base, cookie, token, Array(101).fill(file))).status, 400);
+  assert.equal((await fs.readdir(path.join(uploadDir, 'gallery-staging'))).length, 0);
+  const uploaded = await uploadGallery(base, cookie, token, Array(99).fill(file));
+  assert.equal(uploaded.status, 201);
+  const drafts = (await uploaded.json()).photos;
+  const competing = await Promise.all([
+    uploadGallery(base, cookie, token, [file]), uploadGallery(base, cookie, token, [file]),
+  ]);
+  assert.deepEqual(competing.map((response) => response.status).sort(), [201, 400]);
+  drafts.push(...(await competing.find((response) => response.status === 201).json()).photos);
+  assert.equal(drafts.length, 100);
+  assert.equal((await uploadGallery(base, cookie, token, [file])).status, 400);
+  const entries = drafts.map((photo) => ({ id: photo.id, captionEn: 'a'.repeat(1000), captionKo: '가'.repeat(1000) }));
+  assert.equal((await publishGallery(base, cookie, token, [...entries, { id: '101st' }])).status, 400);
+  assert.equal((await publishGallery(base, cookie, token, entries)).status, 200);
+  const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
+  assert.equal(saved.filter((photo) => photo.state === 'published').length, 100);
+  assert.equal(saved[99].captionKo.length, 1000);
+  const first = await (await fetch(`${base}/gallery`)).text();
+  assert.equal((first.match(/data-gallery-photo/g) || []).length, 24);
+  const last = await (await fetch(`${base}/gallery?page=5`)).text();
+  assert.equal((last.match(/data-gallery-photo/g) || []).length, 4);
+  const linked = await (await fetch(`${base}/gallery/${saved[99].id}?page=1`)).text();
+  assert.match(linked, /data-page="5"/);
+  assert.match(linked, new RegExp(`data-open-photo="${saved[99].id}"`));
+  assert.equal((linked.match(/data-gallery-photo/g) || []).length, 4);
+  assert.equal((await fetch(`${base}/gallery/not-found`)).status, 404);
+  assert.equal((await uploadGallery(base, cookie, token, [file])).status, 201);
+});
+
+test('gallery validates image types, sizes, session ownership, CSRF, origins, and expired-draft cleanup', async (t) => {
+  const { base, close, dataDir, uploadDir } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const token = await csrfToken(base, cookie);
+  const data = await sharp({ create: { width: 20, height: 10, channels: 3, background: '#223b55' } }).png().toBuffer();
+  assert.equal((await uploadGallery(base, '', token, [{ data }])).status, 302);
+  assert.equal((await uploadGallery(base, cookie, 'bad', [{ data }])).status, 403);
+  assert.equal((await uploadGallery(base, cookie, token, [{ data, name: 'bad.svg', type: 'image/svg+xml' }])).status, 400);
+  assert.equal((await uploadGallery(base, cookie, token, [{ data, name: 'bad.jpg', type: 'image/jpeg' }])).status, 400);
+  assert.equal((await uploadGallery(base, cookie, token, [{ data: Buffer.alloc(20 * 1024 * 1024 + 1) }])).status, 400);
+  const tooManyPixels = await sharp({ create: { width: 6400, height: 6400, channels: 3, background: '#223b55' } }).png().toBuffer();
+  assert.equal((await uploadGallery(base, cookie, token, [{ data: tooManyPixels }])).status, 400);
+  assert.equal((await fs.readdir(path.join(uploadDir, 'gallery-staging'))).length, 0);
+  const response = await uploadGallery(base, cookie, token, [{ data }]);
+  const draft = (await response.json()).photos[0];
+  const secondCookie = await login(base);
+  const secondToken = await csrfToken(base, secondCookie);
+  assert.equal((await fetch(`${base}${draft.preview}`, { headers: { cookie: secondCookie } })).status, 404);
+  assert.equal((await publishGallery(base, secondCookie, secondToken, [{ id: draft.id }])).status, 400);
+  assert.equal((await publishGallery(base, cookie, 'bad', [{ id: draft.id }])).status, 403);
+  const badOrigin = await fetch(`${base}/admin/gallery/publish`, {
+    method: 'POST', headers: { 'content-type': 'application/json', cookie, origin: 'https://example.invalid' },
+    body: JSON.stringify({ _csrf: token, photos: [{ id: draft.id }] }),
+  });
+  assert.equal(badOrigin.status, 403);
+  const malformed = await fetch(`${base}/admin/gallery/publish`, {
+    method: 'POST', headers: { ...FORM(base), cookie, 'content-type': 'application/json' }, body: '{',
+  });
+  assert.equal(malformed.status, 400);
+  const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
+  saved[0].expiresAt = 0;
+  await fs.writeFile(path.join(dataDir, 'gallery.json'), JSON.stringify(saved));
+  assert.equal((await fetch(`${base}${draft.preview}`, { headers: { cookie } })).status, 404);
+  assert.equal((await publishGallery(base, cookie, token, [{ id: draft.id }])).status, 400);
+  const orphan = path.join(uploadDir, 'gallery-staging', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.tmp');
+  await fs.writeFile(orphan, 'unfinished upload');
+  await fs.utimes(orphan, new Date(0), new Date(0));
+  assert.equal((await fetch(`${base}/admin/gallery`, { headers: { cookie } })).status, 200);
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json'))), []);
+  assert.deepEqual(await fs.readdir(path.join(uploadDir, 'gallery')), []);
+  assert.deepEqual(await fs.readdir(path.join(uploadDir, 'gallery-staging')), []);
+});
+
 test('public pages render, landing is the information page', async (t) => {
   const { base, close } = await boot();
   t.after(close);
@@ -115,14 +658,18 @@ test('public pages render, landing is the information page', async (t) => {
   const sermons = await fetch(`${base}/sermons`);
   assert.equal(sermons.status, 200);
   assert.doesNotMatch(await sermons.text(), /href="\/admin(?:\/login)?"/);
-  assert.equal((await fetch(`${base}/gallery`)).status, 404);
-  assert.doesNotMatch(home, /Gallery|사진 갤러리|See our life together/);
-  assert.doesNotMatch(home, /href="\/gallery"/);
+  assert.equal((await fetch(`${base}/gallery`)).status, 200);
+  assert.match(home, /href="\/gallery"/);
   assert.doesNotMatch(home, /href="\/admin(?:\/login)?"/);
   assert.match(home, /<a class="brand home-link" href="\/"/);
   assert.match(home, /<nav[^>]*>[\s\S]*href="\/contact"[\s\S]*<\/nav>/);
   assert.doesNotMatch(home, /class="scripture-picker"|class="scripture-language-links"/);
   assert.match(home, /class="btn btn-hero btn-mint" href="\/about"/);
+  const welcomeActions = home.match(/<div class="actions">([\s\S]*?)<\/div>/)[1];
+  assert.deepEqual([...welcomeActions.matchAll(/href="([^"]+)"/g)].map((match) => match[1]), [
+    '/about', '/sermons', '/gallery', '/contact',
+  ]);
+  assert.match(welcomeActions, /href="\/gallery"><span class="bilingual"><span lang="en">Gallery<\/span><span lang="ko">갤러리<\/span>/);
   assert.match(home, /<nav[^>]*>[\s\S]*href="\/about"[\s\S]*<\/nav>/);
   const about = await fetch(`${base}/about`);
   assert.equal(about.status, 200);
@@ -327,7 +874,7 @@ test('configured storage paths serve persistent sermon data and uploads', async 
 
   const sermons = await (await fetch(`${base}/sermons`)).text();
   assert.match(sermons, /Persisted sermon/);
-  assert.equal((await fetch(`${base}/gallery`)).status, 404);
+  assert.equal((await fetch(`${base}/gallery`)).status, 200);
   assert.equal((await fetch(`${base}/uploads/photos/persisted.png`)).status, 404);
 });
 
@@ -907,8 +1454,8 @@ test('admin can upload, list and delete sermon audio', async (t) => {
   const cookie = await login(base);
   const csrf = await csrfToken(base, cookie);
   const adminPage = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
-  assert.doesNotMatch(adminPage, /photo|gallery|사진|갤러리/i);
-  assert.equal((await fetch(`${base}/gallery`)).status, 404);
+  assert.match(adminPage, /href="\/admin\/gallery"/);
+  assert.equal((await fetch(`${base}/gallery`)).status, 200);
   assert.equal((await fetch(`${base}/admin/photos`, {
     method: 'POST', headers: { cookie, origin: base }, redirect: 'manual',
   })).status, 404);
