@@ -34,10 +34,15 @@ if (orderForm) {
       return;
     }
     const remaining = cards.filter((item) => item !== card);
+    const focused = card.contains(document.activeElement) ? document.activeElement : null;
     grid.insertBefore(card, remaining[position - 1] ?? null);
     refresh();
+    if (focused) {
+      (focused.disabled ? card.querySelector('[data-order-position]') : focused).focus({ preventScroll: true });
+      card.scrollIntoView({ block: 'center', behavior: 'instant' });
+    }
     status.textContent = dirty
-      ? `Photo moved to position ${position}. Save order to publish your changes. · 사진이 ${position}번째로 이동했습니다. 순서를 저장하면 공개 갤러리에 적용됩니다.`
+      ? `Moved to position ${position}. Not saved yet. · ${position}번째로 이동했습니다. 아직 저장되지 않았습니다.`
       : 'Original order restored. No changes to save. · 원래 순서로 돌아왔습니다. 저장할 변경 사항이 없습니다.';
   }
 
@@ -53,41 +58,64 @@ if (orderForm) {
     if (event.key === 'Enter' && event.target.matches('[data-order-position]')) {
       event.preventDefault();
       move(event.target.closest('[data-order-id]'), event.target.valueAsNumber);
-    }
-  });
-  grid.addEventListener('dragstart', (event) => {
-    if (busy || !event.target.closest('[data-order-drag]')) {
+    } else if (event.key === 'Escape' && dragged) {
       event.preventDefault();
-      return;
+      clearDrag();
     }
-    dragged = event.target.closest('[data-order-id]');
-    dragged.classList.add('is-dragging');
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', dragged.dataset.orderId);
   });
-  grid.addEventListener('dragover', (event) => {
-    const target = event.target.closest('[data-order-id]');
-    if (!dragged || !target || target === dragged || busy) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    grid.querySelectorAll('.is-drop-target').forEach((card) => card.classList.remove('is-drop-target'));
-    target.classList.add('is-drop-target');
-  });
-  grid.addEventListener('drop', (event) => {
-    const target = event.target.closest('[data-order-id]');
-    if (!dragged || !target || target === dragged || busy) return;
-    event.preventDefault();
-    const remaining = [...grid.children].filter((card) => card !== dragged);
-    const bounds = target.getBoundingClientRect();
-    const after = event.clientX >= bounds.left + bounds.width / 2;
-    move(dragged, remaining.indexOf(target) + (after ? 2 : 1));
-  });
-  grid.addEventListener('dragend', () => {
+  function dropTarget(event) {
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-order-id]');
+    return target && grid.contains(target) && target !== dragged.card ? target : null;
+  }
+
+  function clearDrag() {
+    const previous = dragged;
+    dragged = null;
     grid.querySelectorAll('.is-dragging, .is-drop-target').forEach((card) => {
       card.classList.remove('is-dragging', 'is-drop-target');
     });
-    dragged = null;
+    if (previous?.handle.hasPointerCapture(previous.pointerId)) {
+      previous.handle.releasePointerCapture(previous.pointerId);
+    }
+  }
+
+  grid.addEventListener('pointerdown', (event) => {
+    const handle = event.target.closest('[data-order-drag]');
+    if (busy || dragged || !handle || event.button !== 0 || !event.isPrimary) return;
+    event.preventDefault();
+    handle.focus({ preventScroll: true });
+    dragged = {
+      card: handle.closest('[data-order-id]'), handle, pointerId: event.pointerId,
+      x: event.clientX, y: event.clientY, active: false,
+    };
+    handle.setPointerCapture(event.pointerId);
   });
+  grid.addEventListener('pointermove', (event) => {
+    if (!dragged || event.pointerId !== dragged.pointerId) return;
+    if (!dragged.active && Math.hypot(event.clientX - dragged.x, event.clientY - dragged.y) < 6) return;
+    event.preventDefault();
+    dragged.active = true;
+    dragged.card.classList.add('is-dragging');
+    grid.querySelectorAll('.is-drop-target').forEach((card) => card.classList.remove('is-drop-target'));
+    dropTarget(event)?.classList.add('is-drop-target');
+  });
+  grid.addEventListener('pointerup', (event) => {
+    if (!dragged || event.pointerId !== dragged.pointerId) return;
+    const card = dragged.card;
+    const target = dragged.active ? dropTarget(event) : null;
+    clearDrag();
+    if (target) {
+      const remaining = [...grid.children].filter((item) => item !== card);
+      const bounds = target.getBoundingClientRect();
+      const after = event.clientX >= bounds.left + bounds.width / 2;
+      move(card, remaining.indexOf(target) + (after ? 2 : 1));
+    }
+  });
+  const cancelDrag = (event) => {
+    if (dragged && event.pointerId === dragged.pointerId) clearDrag();
+  };
+  grid.addEventListener('pointercancel', cancelDrag);
+  grid.addEventListener('lostpointercapture', cancelDrag);
 
   function confirmDiscard(event) {
     if (dirty && !window.confirm('Discard your unsaved photo order? · 저장하지 않은 사진 순서를 취소할까요?')) {

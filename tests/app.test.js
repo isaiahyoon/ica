@@ -108,6 +108,101 @@ async function publishGallery(base, cookie, token, photos) {
   });
 }
 
+async function galleryOrder(base, cookie) {
+  const response = await fetch(`${base}/admin/gallery/reorder`, { headers: { cookie } });
+  const html = await response.text();
+  return {
+    response, html,
+    revision: html.match(/name="revision" value="([^"]+)"/)?.[1],
+    ids: [...html.matchAll(/data-order-id="([^"]+)"/g)].map((match) => match[1]),
+  };
+}
+
+async function saveGalleryOrder(base, cookie, token, revision, ids, origin = base) {
+  return fetch(`${base}/admin/gallery/order`, {
+    method: 'POST', redirect: 'manual',
+    headers: { cookie, origin, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ _csrf: token, revision, ids }),
+  });
+}
+
+function galleryRecords(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `photo-${index + 1}`, file: `photo-${index + 1}.webp`, thumbnail: `photo-${index + 1}-thumb.webp`,
+    state: 'published', captionEn: `Photo ${index + 1}`, captionKo: '교회 사진', width: 20, height: 10,
+    publishedAt: new Date(Date.UTC(2026, 10, 14, 0, 0, index)).toISOString(),
+  }));
+}
+
+test('admins reorder all published photos while preserving metadata, drafts, pagination, and stable links', async (t) => {
+  const { base, close, dataDir } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const token = await csrfToken(base, cookie);
+  const original = galleryRecords(27);
+  const draft = { ...original[0], id: 'private-draft', state: 'draft', sessionId: 'other-session', expiresAt: Date.now() + 3600000 };
+  await fs.writeFile(path.join(dataDir, 'gallery.json'), JSON.stringify([...original, draft]));
+  const editor = await galleryOrder(base, cookie);
+  assert.equal(editor.response.status, 200);
+  assert.equal(editor.response.headers.get('cache-control'), 'no-store');
+  assert.equal(editor.ids.length, 27);
+  assert.equal(editor.ids[0], original[26].id);
+  assert.doesNotMatch(editor.html, /data-order-id="private-draft"|name="captionEn"/);
+  assert.match(editor.html, /data-order-drag/);
+  assert.match(editor.html, /data-order-position/);
+  assert.equal((await fetch(`${base}/admin/gallery/reorder`, { redirect: 'manual' })).status, 302);
+  const desired = original.map((photo) => photo.id);
+  assert.equal((await saveGalleryOrder(base, '', token, editor.revision, desired)).status, 302);
+  assert.equal((await saveGalleryOrder(base, cookie, 'bad', editor.revision, desired)).status, 403);
+  assert.equal((await saveGalleryOrder(base, cookie, token, editor.revision, desired, 'https://example.invalid')).status, 403);
+  for (const invalid of [desired.slice(1), [...desired, 'unknown'], [desired[0], ...desired.slice(0, -1)], [...desired.slice(0, -1), draft.id]]) {
+    assert.equal((await saveGalleryOrder(base, cookie, token, editor.revision, invalid)).status, 400);
+  }
+  assert.equal((await saveGalleryOrder(base, cookie, token, editor.revision, desired)).status, 200);
+  const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
+  assert.deepEqual(saved, [...original.map((photo, index) => ({ ...photo, order: index })), draft]);
+  const publicHtml = await (await fetch(`${base}/gallery`)).text();
+  const firstPageIds = [...publicHtml.matchAll(/data-photo-id="([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(firstPageIds, desired.slice(0, 24));
+  const link = await (await fetch(`${base}/gallery/${original[26].id}`)).text();
+  assert.match(link, /data-page="2"/);
+  assert.match(link, /data-open-photo="photo-27"/);
+  assert.equal((await saveGalleryOrder(base, cookie, token, editor.revision, editor.ids)).status, 409);
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json'))), saved);
+});
+
+test('gallery ordering detects concurrent changes and new batches prepend without losing the saved order', async (t) => {
+  const { base, close, dataDir } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const token = await csrfToken(base, cookie);
+  await fs.writeFile(path.join(dataDir, 'gallery.json'), JSON.stringify(galleryRecords(3)));
+  const editor = await galleryOrder(base, cookie);
+  const responses = await Promise.all([
+    saveGalleryOrder(base, cookie, token, editor.revision, ['photo-2', 'photo-1', 'photo-3']),
+    saveGalleryOrder(base, cookie, token, editor.revision, ['photo-1', 'photo-3', 'photo-2']),
+  ]);
+  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
+  const current = await galleryOrder(base, cookie);
+  const edit = await fetch(`${base}/admin/gallery/photo-1/edit`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie },
+    body: new URLSearchParams({ _csrf: token, captionEn: 'Edited during reordering', captionKo: '수정된 설명' }),
+  });
+  assert.equal(edit.status, 302);
+  assert.equal((await saveGalleryOrder(base, cookie, token, current.revision, current.ids)).status, 409);
+  const beforeBatch = await galleryOrder(base, cookie);
+  const data = await sharp({ create: { width: 20, height: 10, channels: 3, background: '#223b55' } }).png().toBuffer();
+  const uploaded = await uploadGallery(base, cookie, token, [{ data }, { data }]);
+  const newPhotos = (await uploaded.json()).photos;
+  assert.equal((await galleryOrder(base, cookie)).revision, beforeBatch.revision, 'private uploads do not conflict');
+  assert.equal((await publishGallery(base, cookie, token, newPhotos.map((photo) => ({ id: photo.id })))).status, 200);
+  assert.equal((await saveGalleryOrder(base, cookie, token, beforeBatch.revision, beforeBatch.ids)).status, 409);
+  const afterBatch = await galleryOrder(base, cookie);
+  assert.deepEqual(afterBatch.ids, [...newPhotos.map((photo) => photo.id), ...beforeBatch.ids]);
+  const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
+  assert.equal(saved.find((photo) => photo.id === 'photo-1').captionEn, 'Edited during reordering');
+});
+
 async function galleryViewerHarness({ fetchPage, hash = '', openPhotoId = '' } = {}) {
   const source = await fs.readFile(new URL('../public/scripts/gallery.js', import.meta.url), 'utf8');
   const viewerEvents = new Map();

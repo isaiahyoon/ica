@@ -380,13 +380,13 @@ a.page-num:hover, a.page-step:hover { background: var(--navy); color: #fff; bord
 .gallery-order-caption { height: 4.5em; overflow: hidden; font-size: .85rem; }
 .gallery-order-steps { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
 .gallery-order-card .btn { padding: .5rem; font-size: .9rem; }
-.gallery-order-card [draggable] { cursor: grab; }
+.gallery-order-card [data-order-drag] { cursor: grab; touch-action: none; }
 .gallery-order-position { display: flex; align-items: end; gap: .5rem; }
 .gallery-order-position label { display: flex; flex: 1; flex-direction: column; gap: .4rem; min-width: 0; font-size: .85rem; }
 .gallery-order-position input { width: 100%; }
 .gallery-order-card.is-dragging { opacity: .5; }
 .gallery-order-card.is-drop-target { outline: 3px solid var(--focus); outline-offset: 3px; }
-.gallery-order-save { position: sticky; bottom: 1rem; z-index: 4; margin-top: 1.5rem; box-shadow: var(--shadow); }
+.gallery-order-save { position: sticky; bottom: 1rem; z-index: 4; margin-top: 1.5rem; padding: 1rem; box-shadow: var(--shadow); }
 .gallery-order-save [role="status"] { margin-top: 0; }
 .gallery-order-form [hidden] { display: none; }
 .sermon:nth-child(3n+2) { --fill: linear-gradient(160deg, #fff, var(--paper) 55%, var(--lavender)); }
