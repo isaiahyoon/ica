@@ -89,6 +89,236 @@ async function csrfToken(base, cookie) {
   return html.match(/name="_csrf" value="([^"]+)"/)[1];
 }
 
+async function uploadGallery(base, cookie, token, files) {
+  const body = new FormData();
+  for (const file of files) {
+    body.append('photos', new Blob([file.data], { type: file.type ?? 'image/png' }), file.name ?? 'photo.png');
+  }
+  return fetch(`${base}/admin/gallery/uploads`, {
+    method: 'POST', redirect: 'manual',
+    headers: { cookie, origin: base, 'x-csrf-token': token, accept: 'application/json' }, body,
+  });
+}
+
+async function publishGallery(base, cookie, token, photos) {
+  return fetch(`${base}/admin/gallery/publish`, {
+    method: 'POST', redirect: 'manual',
+    headers: { ...FORM(base), cookie, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ _csrf: token, photos }),
+  });
+}
+
+test('gallery viewer opens the selected image and captions and closes with Escape', async () => {
+  const source = await fs.readFile(new URL('../public/scripts/gallery.js', import.meta.url), 'utf8');
+  const viewerEvents = new Map();
+  const linkEvents = new Map();
+  const image = { removeAttribute(name) { delete this[name]; } };
+  const clonedCaption = {};
+  let shownCaption;
+  const viewer = {
+    open: false,
+    showModal() { this.open = true; },
+    close() { this.open = false; viewerEvents.get('close')(); },
+    addEventListener(name, fn) { viewerEvents.set(name, fn); },
+    querySelector(selector) {
+      return selector === 'img' ? image : { replaceChildren(caption) { shownCaption = caption; } };
+    },
+  };
+  const link = {
+    href: '/gallery/photos/photo/image.webp',
+    addEventListener(name, fn) { linkEvents.set(name, fn); },
+    querySelector() { return { alt: 'Church family' }; },
+    closest() { return { querySelector() { return { cloneNode() { return clonedCaption; } }; } }; },
+  };
+  runInNewContext(source, {
+    document: { querySelector() { return viewer; }, querySelectorAll() { return [link]; } },
+  });
+  let prevented = false;
+  const click = { preventDefault() { prevented = true; } };
+  linkEvents.get('click')({ ...click, ctrlKey: true });
+  assert.equal(viewer.open, false);
+  assert.equal(prevented, false);
+  linkEvents.get('click')(click);
+  assert.equal(viewer.open, true);
+  assert.equal(image.src, link.href);
+  assert.equal(image.alt, 'Church family');
+  assert.equal(shownCaption, clonedCaption);
+  assert.equal(prevented, true);
+  viewerEvents.get('keydown')({ key: 'Tab' });
+  assert.equal(viewer.open, true);
+  prevented = false;
+  viewerEvents.get('keydown')({ key: 'Escape', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(viewer.open, false);
+  assert.equal(image.src, undefined);
+});
+
+test('gallery previews stay private, publishes captions, and edits and replaces without losing metadata', async (t) => {
+  const { base, close, dataDir, uploadDir } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const token = await csrfToken(base, cookie);
+  const data = await sharp({ create: { width: 2500, height: 1250, channels: 3, background: '#223b55' } }).png().toBuffer();
+  const empty = await (await fetch(`${base}/gallery`)).text();
+  assert.match(empty, /No photos have been shared/);
+  assert.match(empty, /href="\/gallery"/);
+  assert.match(await (await fetch(`${base}/admin`, { headers: { cookie } })).text(), /href="\/admin\/gallery"/);
+  const uploaded = await uploadGallery(base, cookie, token, [{ data }, { data }]);
+  assert.equal(uploaded.status, 201);
+  const { photos: drafts } = await uploaded.json();
+  assert.equal(drafts.length, 2);
+  const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
+  assert.equal(saved[0].width, 2048);
+  assert.equal(saved[0].height, 1024);
+  assert.equal((await fetch(`${base}${drafts[0].preview}`, { redirect: 'manual' })).status, 302);
+  assert.equal((await fetch(`${base}/gallery/photos/${saved[0].id}/${saved[0].file}`)).status, 404);
+  assert.equal((await fetch(`${base}/uploads/gallery/${saved[0].file}`)).status, 404);
+  const preview = await fetch(`${base}${drafts[0].preview}`, { headers: { cookie } });
+  assert.equal(preview.status, 200);
+  assert.equal(preview.headers.get('cache-control'), 'no-store');
+  const previewInfo = await sharp(Buffer.from(await preview.arrayBuffer())).metadata();
+  assert.equal(previewInfo.width, 480);
+  const admin = await (await fetch(`${base}/admin/gallery`, { headers: { cookie } })).text();
+  assert.match(admin, new RegExp(`data-draft-id="${drafts[0].id}"`));
+  assert.match(admin, /data-gallery-files[^>]*|multiple data-gallery-files/);
+  assert.match(admin, /name="captionEn"/);
+  assert.match(admin, /name="captionKo"/);
+
+  assert.equal((await publishGallery(base, cookie, token, [{ id: drafts[0].id, captionEn: 'a'.repeat(1001) }])).status, 400);
+  assert.equal((await publishGallery(base, cookie, token, [{ id: drafts[0].id }, { id: drafts[0].id }])).status, 400);
+  const details = [
+    { id: drafts[0].id, captionEn: 'Church family\n<script>alert(1)</script>', captionKo: '교회 가족\n함께' },
+    { id: drafts[1].id },
+  ];
+  assert.equal((await publishGallery(base, cookie, token, details)).status, 200);
+  const gallery = await (await fetch(`${base}/gallery`)).text();
+  assert.match(gallery, /Church family\n&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(gallery, /교회 가족\n함께/);
+  assert.doesNotMatch(gallery, /<script>alert/);
+  assert.match(gallery, /<dialog[^>]*aria-label="Photo viewer/);
+  const photoUrl = `${base}/gallery/photos/${saved[0].id}/${saved[0].file}`;
+  const full = await fetch(photoUrl);
+  assert.equal(full.status, 200);
+  assert.match(full.headers.get('content-type'), /image\/webp/);
+  assert.equal((await fetch(`${base}${drafts[0].preview}`, { headers: { cookie } })).status, 404);
+  assert.equal((await publishGallery(base, cookie, token, details)).status, 400);
+
+  const edit = await fetch(`${base}/admin/gallery/${saved[0].id}/edit`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie },
+    body: new URLSearchParams({ _csrf: token, captionEn: 'Updated\ncaption', captionKo: '수정된 설명' }),
+  });
+  assert.equal(edit.status, 302);
+  assert.match(await (await fetch(`${base}/gallery`)).text(), /Updated\ncaption/);
+  const broken = await uploadGallery(base, cookie, token, [{ data: Buffer.from('not an image') }]);
+  assert.equal(broken.status, 400);
+  assert.equal((await fetch(photoUrl)).status, 200);
+  const replacement = await uploadGallery(base, cookie, token, [{ data }]);
+  const draft = (await replacement.json()).photos[0];
+  const replace = await fetch(`${base}/admin/gallery/${saved[0].id}/replace`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie },
+    body: new URLSearchParams({ _csrf: token, stagedPhoto: draft.id }),
+  });
+  assert.equal(replace.status, 302);
+  const after = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
+  assert.equal(after.length, 2);
+  const replaced = after.find((photo) => photo.id === saved[0].id);
+  assert.equal(replaced.captionEn, 'Updated\ncaption');
+  assert.equal(replaced.captionKo, '수정된 설명');
+  assert.equal(replaced.publishedAt, after[1].publishedAt);
+  assert.notEqual(replaced.file, saved[0].file);
+  assert.equal((await fetch(photoUrl)).status, 404);
+  assert.equal((await fetch(`${base}/gallery/photos/${replaced.id}/${replaced.file}`)).status, 200);
+  await assert.rejects(fs.stat(path.join(uploadDir, 'gallery', saved[0].file)), { code: 'ENOENT' });
+  assert.equal((await fs.readdir(path.join(uploadDir, 'gallery-staging'))).length, 0);
+  assert.equal((await fs.readdir(path.join(uploadDir, 'gallery'))).length, 4);
+
+  const reopened = createApp({ dataDir, uploadDir, password: PASSWORD }).listen(0);
+  t.after(async () => {
+    const done = new Promise((resolve) => reopened.close(resolve));
+    reopened.closeAllConnections();
+    await done;
+  });
+  const restored = await (await fetch(`http://localhost:${reopened.address().port}/gallery`)).text();
+  assert.match(restored, /Updated\ncaption/);
+  assert.match(restored, /수정된 설명/);
+});
+
+test('gallery enforces exactly 100 uploads and accepts a full captioned batch beyond ordinary form limits', async (t) => {
+  const { base, close, dataDir, uploadDir } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const token = await csrfToken(base, cookie);
+  const data = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#223b55' } }).png().toBuffer();
+  const file = { data };
+  assert.equal((await uploadGallery(base, cookie, token, Array(101).fill(file))).status, 400);
+  assert.equal((await fs.readdir(path.join(uploadDir, 'gallery-staging'))).length, 0);
+  const uploaded = await uploadGallery(base, cookie, token, Array(99).fill(file));
+  assert.equal(uploaded.status, 201);
+  const drafts = (await uploaded.json()).photos;
+  const competing = await Promise.all([
+    uploadGallery(base, cookie, token, [file]), uploadGallery(base, cookie, token, [file]),
+  ]);
+  assert.deepEqual(competing.map((response) => response.status).sort(), [201, 400]);
+  drafts.push(...(await competing.find((response) => response.status === 201).json()).photos);
+  assert.equal(drafts.length, 100);
+  assert.equal((await uploadGallery(base, cookie, token, [file])).status, 400);
+  const entries = drafts.map((photo) => ({ id: photo.id, captionEn: 'a'.repeat(1000), captionKo: '가'.repeat(1000) }));
+  assert.equal((await publishGallery(base, cookie, token, [...entries, { id: '101st' }])).status, 400);
+  assert.equal((await publishGallery(base, cookie, token, entries)).status, 200);
+  const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
+  assert.equal(saved.filter((photo) => photo.state === 'published').length, 100);
+  assert.equal(saved[99].captionKo.length, 1000);
+  const first = await (await fetch(`${base}/gallery`)).text();
+  assert.equal((first.match(/data-gallery-photo/g) || []).length, 24);
+  const last = await (await fetch(`${base}/gallery?page=5`)).text();
+  assert.equal((last.match(/data-gallery-photo/g) || []).length, 4);
+  assert.equal((await uploadGallery(base, cookie, token, [file])).status, 201);
+});
+
+test('gallery validates image types, sizes, session ownership, CSRF, origins, and expired-draft cleanup', async (t) => {
+  const { base, close, dataDir, uploadDir } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const token = await csrfToken(base, cookie);
+  const data = await sharp({ create: { width: 20, height: 10, channels: 3, background: '#223b55' } }).png().toBuffer();
+  assert.equal((await uploadGallery(base, '', token, [{ data }])).status, 302);
+  assert.equal((await uploadGallery(base, cookie, 'bad', [{ data }])).status, 403);
+  assert.equal((await uploadGallery(base, cookie, token, [{ data, name: 'bad.svg', type: 'image/svg+xml' }])).status, 400);
+  assert.equal((await uploadGallery(base, cookie, token, [{ data, name: 'bad.jpg', type: 'image/jpeg' }])).status, 400);
+  assert.equal((await uploadGallery(base, cookie, token, [{ data: Buffer.alloc(20 * 1024 * 1024 + 1) }])).status, 400);
+  const tooManyPixels = await sharp({ create: { width: 6400, height: 6400, channels: 3, background: '#223b55' } }).png().toBuffer();
+  assert.equal((await uploadGallery(base, cookie, token, [{ data: tooManyPixels }])).status, 400);
+  assert.equal((await fs.readdir(path.join(uploadDir, 'gallery-staging'))).length, 0);
+  const response = await uploadGallery(base, cookie, token, [{ data }]);
+  const draft = (await response.json()).photos[0];
+  const secondCookie = await login(base);
+  const secondToken = await csrfToken(base, secondCookie);
+  assert.equal((await fetch(`${base}${draft.preview}`, { headers: { cookie: secondCookie } })).status, 404);
+  assert.equal((await publishGallery(base, secondCookie, secondToken, [{ id: draft.id }])).status, 400);
+  assert.equal((await publishGallery(base, cookie, 'bad', [{ id: draft.id }])).status, 403);
+  const badOrigin = await fetch(`${base}/admin/gallery/publish`, {
+    method: 'POST', headers: { 'content-type': 'application/json', cookie, origin: 'https://example.invalid' },
+    body: JSON.stringify({ _csrf: token, photos: [{ id: draft.id }] }),
+  });
+  assert.equal(badOrigin.status, 403);
+  const malformed = await fetch(`${base}/admin/gallery/publish`, {
+    method: 'POST', headers: { ...FORM(base), cookie, 'content-type': 'application/json' }, body: '{',
+  });
+  assert.equal(malformed.status, 400);
+  const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
+  saved[0].expiresAt = 0;
+  await fs.writeFile(path.join(dataDir, 'gallery.json'), JSON.stringify(saved));
+  assert.equal((await fetch(`${base}${draft.preview}`, { headers: { cookie } })).status, 404);
+  assert.equal((await publishGallery(base, cookie, token, [{ id: draft.id }])).status, 400);
+  const orphan = path.join(uploadDir, 'gallery-staging', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.tmp');
+  await fs.writeFile(orphan, 'unfinished upload');
+  await fs.utimes(orphan, new Date(0), new Date(0));
+  assert.equal((await fetch(`${base}/admin/gallery`, { headers: { cookie } })).status, 200);
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json'))), []);
+  assert.deepEqual(await fs.readdir(path.join(uploadDir, 'gallery')), []);
+  assert.deepEqual(await fs.readdir(path.join(uploadDir, 'gallery-staging')), []);
+});
+
 test('public pages render, landing is the information page', async (t) => {
   const { base, close } = await boot();
   t.after(close);
@@ -115,14 +345,18 @@ test('public pages render, landing is the information page', async (t) => {
   const sermons = await fetch(`${base}/sermons`);
   assert.equal(sermons.status, 200);
   assert.doesNotMatch(await sermons.text(), /href="\/admin(?:\/login)?"/);
-  assert.equal((await fetch(`${base}/gallery`)).status, 404);
-  assert.doesNotMatch(home, /Gallery|사진 갤러리|See our life together/);
-  assert.doesNotMatch(home, /href="\/gallery"/);
+  assert.equal((await fetch(`${base}/gallery`)).status, 200);
+  assert.match(home, /href="\/gallery"/);
   assert.doesNotMatch(home, /href="\/admin(?:\/login)?"/);
   assert.match(home, /<a class="brand home-link" href="\/"/);
   assert.match(home, /<nav[^>]*>[\s\S]*href="\/contact"[\s\S]*<\/nav>/);
   assert.doesNotMatch(home, /class="scripture-picker"|class="scripture-language-links"/);
   assert.match(home, /class="btn btn-hero btn-mint" href="\/about"/);
+  const welcomeActions = home.match(/<div class="actions">([\s\S]*?)<\/div>/)[1];
+  assert.deepEqual([...welcomeActions.matchAll(/href="([^"]+)"/g)].map((match) => match[1]), [
+    '/about', '/sermons', '/gallery', '/contact',
+  ]);
+  assert.match(welcomeActions, /href="\/gallery"><span class="bilingual"><span lang="en">Gallery<\/span><span lang="ko">갤러리<\/span>/);
   assert.match(home, /<nav[^>]*>[\s\S]*href="\/about"[\s\S]*<\/nav>/);
   const about = await fetch(`${base}/about`);
   assert.equal(about.status, 200);
@@ -327,7 +561,7 @@ test('configured storage paths serve persistent sermon data and uploads', async 
 
   const sermons = await (await fetch(`${base}/sermons`)).text();
   assert.match(sermons, /Persisted sermon/);
-  assert.equal((await fetch(`${base}/gallery`)).status, 404);
+  assert.equal((await fetch(`${base}/gallery`)).status, 200);
   assert.equal((await fetch(`${base}/uploads/photos/persisted.png`)).status, 404);
 });
 
@@ -907,8 +1141,8 @@ test('admin can upload, list and delete sermon audio', async (t) => {
   const cookie = await login(base);
   const csrf = await csrfToken(base, cookie);
   const adminPage = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
-  assert.doesNotMatch(adminPage, /photo|gallery|사진|갤러리/i);
-  assert.equal((await fetch(`${base}/gallery`)).status, 404);
+  assert.match(adminPage, /href="\/admin\/gallery"/);
+  assert.equal((await fetch(`${base}/gallery`)).status, 200);
   assert.equal((await fetch(`${base}/admin/photos`, {
     method: 'POST', headers: { cookie, origin: base }, redirect: 'manual',
   })).status, 404);

@@ -6,12 +6,13 @@ Public website: [immanuelchurchofamerica.org](https://immanuelchurchofamerica.or
 
 ## Features
 
-- **Information page** (landing page, `/`) — welcome and overview, with Scripture passages that open English KJV and Korean KRV links to that passage.
+- **Information page** (landing page, `/`) — welcome and overview, with About, Sermons, Gallery, and Contact links in a responsive 2×2 action grid, and Scripture passages that open English KJV and Korean KRV links to that passage.
 - **About** (`/about`) — bilingual page on our family church, worship services and times, worship style, preaching, what we affirm, and leadership with contact numbers.
 - **Sermons** (`/sermons`, `/sermons/:id`) — public audio player list and individual sermon pages, with speaker, service and date shown in separate English and Korean rows, optional service information, expandable descriptions, preserved text line breaks, native sharing where supported, and a copy-link option. Recognized Scripture references offer KJV and KRV links, including matching bilingual references on separate lines or separated by parentheses; existing `//` references display on separate lines. Split verse ranges get separate links.
 - **Clickable Scripture** — passage menus use silver-plated borders except on sermon cards, where the reference retains its understated left rule. Keyboard-focus feedback is visible and reduced motion is supported. Unrecognized or conflicting references remain plain text.
 - **Link previews** — absolute, bilingual Open Graph and Twitter Card metadata with a custom 1200×630 preview image; the canonical URL is set for each page. Each sermon has a server-generated PNG at `/sermons/:id/preview.png` with its title, saved Bible reference, and optional service label centered within the original blue-and-gold artwork—not verse text or the description. Image URLs change when any of those fields changes; a bounded in-memory cache avoids repeated rendering. Messaging apps may retain older previews. Missing references or service labels are omitted from the image; without a reference, metadata offers a bilingual listening invitation.
 - **Contact** (`/contact`) — address with a Google Maps link, a bilingual location diagram showing the parking lot directly behind the building's south side, visitor details, and Instagram, with a link to worship times on About; includes a clickable 1 Corinthians 13:12 verse beside the church logo, with English KJV and Korean KRV links, and is linked from the welcome page.
+- **Gallery** (`/gallery`) — paginated public photo grid with optional English/Korean multiline captions and accessible full-size viewing. **Manage gallery** in the admin panel opens `/admin/gallery`: select up to 100 JPEG, PNG, or WebP photos per batch (20 MB and 40 megapixels each), review private uploaded previews, enter captions, and publish. Uploads run individually with progress and per-photo errors; successful uploads remain available even if another file fails. Caption editing and previewed photo replacement preserve the existing gallery entry and saved captions.
 - **Admin** (`/admin`) — two-step sign-in (password, then authenticator code) for uploading, replacing, and removing sermon audio; sermon details have separate English and Korean speaker fields, one date and an optional service dropdown, and support multiline text. Existing custom service values are preserved when editing. Replacement keeps the existing sermon details and link; audio starts uploading as soon as it is selected, while sermon details can be entered for new sermons; the owner can add, reset, and remove other admins.
 - **Font study** (`/font-study.html`) — English and Korean typeface specimens with a live four-font serif/sans pairing preview.
 - **Analytics** — optional Umami page-view tracking on public server-rendered pages. Set `UMAMI_WEBSITE_ID`; `UMAMI_SCRIPT_URL` optionally selects an HTTPS script URL (defaults to Umami Cloud). Admin pages are excluded.
@@ -20,6 +21,7 @@ Public website: [immanuelchurchofamerica.org](https://immanuelchurchofamerica.or
 
 - `server.js` defines the Express app and routes; `lib/` contains server-side rendering and supporting modules.
 - `lib/sermon-preview.js` renders sermon preview PNGs with Sharp, Resvg, and shared CSS colors. `assets/fonts/` bundles regular Cormorant Garamond and Noto Serif CJK KR (the Korean regional face of Noto Serif) for consistent English/Korean rendering on all hosts, with their SIL Open Font Licenses. No browser, external rendering service, or build step is required.
+- `lib/gallery-routes.js` handles gallery storage, private session-owned drafts, publishing, caption edits, and replacement. Sharp validates still-image contents, corrects orientation, strips embedded metadata, and generates WebP display images (up to 2048 pixels per side) and thumbnails (up to 480). Templates remain in `lib/render.js`; browser behavior lives in `public/scripts/gallery.js` and `public/scripts/admin-gallery.js`.
 - `public/scripts/` holds page-specific browser behavior, separate from the server-rendered HTML templates in `lib/render.js`.
 - `public/styles.css` is the shared stylesheet and design-token source; `tests/` contains the automated test suite.
 
@@ -135,9 +137,11 @@ The app also supports `ICA_DATA_DIR` and `ICA_UPLOAD_DIR` for persistent storage
 
 Audio selected in the admin form uploads to a private staging directory first. New audio is published with its sermon details only after the form is submitted; replacing audio keeps the existing sermon details and link. Abandoned staged uploads are removed after one hour.
 
+Gallery records, including private draft ownership and expiry, are stored in `data/gallery.json`; generated images live in `uploads/gallery/`, and temporary incoming files in `uploads/gallery-staging/`. These directories are never exposed through static serving: public image routes only serve files belonging to published records. Draft preview routes require the uploading admin session. Unpublished photos expire after one hour; cleanup runs at startup, every minute, and when opening gallery management. Drafts from a revoked session are inaccessible and expire normally. Reloading gallery management restores unexpired previews, but unsaved caption text is not retained. Publishing accepts 1–100 distinct drafts atomically; captions are optional and limited to 1,000 characters per language. New batches may be uploaded after publishing.
+
 ## Data
 
-Sermon metadata is saved in `data/` and uploaded audio files in `uploads/` (both git-ignored). Delete those folders to reset.
+Sermon and gallery metadata are saved in `data/`, and uploaded audio and gallery images in `uploads/` (both git-ignored). Delete those folders to reset.
 
 ## Design
 
