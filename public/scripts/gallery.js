@@ -42,9 +42,10 @@ if (viewer && typeof viewer.showModal === 'function') {
     const link = pageLinks[index];
     currentPage = pageNumber;
     currentIndex = index;
-    image.src = link.href;
+    image.src = link.dataset.galleryImage;
     image.alt = link.querySelector('img').alt;
     caption.replaceChildren(link.closest('figure').querySelector('figcaption').cloneNode(true));
+    window.history.replaceState(null, '', link.href);
     status.textContent = `Photo ${index + 1}/${pageLinks.length} · Page ${pageNumber}/${totalPages} · 사진 ${index + 1}/${pageLinks.length} · 페이지 ${pageNumber}/${totalPages}`;
     updateControls();
   }
@@ -124,7 +125,14 @@ if (viewer && typeof viewer.showModal === 'function') {
     if (currentPage !== initialPage) {
       window.location.assign(`/gallery?page=${currentPage}#${encodeURIComponent(link.closest('figure').id)}`);
     } else {
+      window.history.replaceState(null, '', `/gallery${currentPage > 1 ? `?page=${currentPage}` : ''}#${encodeURIComponent(link.closest('figure').id)}`);
       returnToPhoto(link);
     }
   });
+
+  const linkedPhoto = links.findIndex((link) => link.dataset.photoId === viewer.dataset.openPhoto);
+  if (linkedPhoto >= 0) {
+    showPhoto(initialPage, linkedPhoto);
+    viewer.showModal();
+  }
 }

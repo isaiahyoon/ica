@@ -108,7 +108,7 @@ async function publishGallery(base, cookie, token, photos) {
   });
 }
 
-async function galleryViewerHarness({ fetchPage, hash = '' } = {}) {
+async function galleryViewerHarness({ fetchPage, hash = '', openPhotoId = '' } = {}) {
   const source = await fs.readFile(new URL('../public/scripts/gallery.js', import.meta.url), 'utf8');
   const viewerEvents = new Map();
   const image = { removeAttribute(name) { delete this[name]; } };
@@ -123,7 +123,7 @@ async function galleryViewerHarness({ fetchPage, hash = '' } = {}) {
       querySelector() { return { cloneNode() { return { id }; } }; },
     };
     return {
-      href: `/gallery/photos/${id}/image.webp`, events: new Map(),
+      href: `/gallery/${id}`, dataset: { photoId: String(id), galleryImage: `/gallery/photos/${id}/image.webp` }, events: new Map(),
       addEventListener(name, fn) { this.events.set(name, fn); },
       querySelector() { return { alt: `Photo ${id}` }; },
       closest() { return figure; },
@@ -137,7 +137,7 @@ async function galleryViewerHarness({ fetchPage, hash = '' } = {}) {
     '.gallery-viewer-caption': { replaceChildren(caption) { shownCaption = caption; } },
   };
   const viewer = {
-    open: false, dataset: { page: '1', pages: '3' },
+    open: false, dataset: { page: '1', pages: '3', openPhoto: openPhotoId },
     showModal() { this.open = true; },
     close() { this.open = false; viewerEvents.get('close')(); },
     addEventListener(name, fn) { viewerEvents.set(name, fn); },
@@ -147,10 +147,12 @@ async function galleryViewerHarness({ fetchPage, hash = '' } = {}) {
   const requests = [];
   const windowEvents = new Map();
   const locations = [];
+  const history = [];
   runInNewContext(source, {
     document: { querySelector() { return viewer; }, querySelectorAll() { return pageLinks.get(1); } },
     window: {
       location: { hash, assign(url) { locations.push(url); } },
+      history: { replaceState(_state, _title, url) { history.push(url); } },
       addEventListener(name, fn) { windowEvents.set(name, fn); },
     },
     AbortController,
@@ -168,7 +170,7 @@ async function galleryViewerHarness({ fetchPage, hash = '' } = {}) {
     },
   });
   return {
-    viewer, image, previous, next, status, requests, viewerEvents, pageLinks, locations, windowEvents,
+    viewer, image, previous, next, status, requests, viewerEvents, pageLinks, locations, windowEvents, history,
     get caption() { return shownCaption; },
   };
 }
@@ -184,7 +186,7 @@ test('gallery viewer opens the selected image and captions and closes with Escap
   assert.equal(prevented, false);
   link.events.get('click')(click);
   assert.equal(viewer.open, true);
-  assert.equal(image.src, link.href);
+  assert.equal(image.src, link.dataset.galleryImage);
   assert.equal(image.alt, 'Photo 1');
   assert.equal(state.caption.id, 1);
   assert.equal(prevented, true);
@@ -293,6 +295,18 @@ test('closing a viewer on another page returns to that page and restores photo f
   assert.equal(returned.viewer.open, false);
 });
 
+test('individual photo links open the viewer and browsing updates the shareable URL without reopening on close', async () => {
+  const state = await galleryViewerHarness({ openPhotoId: '2' });
+  assert.equal(state.viewer.open, true);
+  assert.equal(state.image.alt, 'Photo 2');
+  assert.equal(state.history.at(-1), '/gallery/2');
+  await state.previous.events.get('click')();
+  assert.equal(state.image.alt, 'Photo 1');
+  assert.equal(state.history.at(-1), '/gallery/1');
+  state.viewer.close();
+  assert.equal(state.history.at(-1), '/gallery#gallery-photo-1');
+});
+
 test('gallery previews stay private, publishes captions, and edits and replaces without losing metadata', async (t) => {
   const { base, close, dataDir, uploadDir } = await boot();
   t.after(close);
@@ -312,6 +326,7 @@ test('gallery previews stay private, publishes captions, and edits and replaces 
   assert.equal(saved[0].height, 1024);
   assert.equal((await fetch(`${base}${drafts[0].preview}`, { redirect: 'manual' })).status, 302);
   assert.equal((await fetch(`${base}/gallery/photos/${saved[0].id}/${saved[0].file}`)).status, 404);
+  assert.equal((await fetch(`${base}/gallery/${saved[0].id}`)).status, 404);
   assert.equal((await fetch(`${base}/uploads/gallery/${saved[0].file}`)).status, 404);
   const preview = await fetch(`${base}${drafts[0].preview}`, { headers: { cookie } });
   assert.equal(preview.status, 200);
@@ -368,6 +383,9 @@ test('gallery previews stay private, publishes captions, and edits and replaces 
   assert.notEqual(replaced.file, saved[0].file);
   assert.equal((await fetch(photoUrl)).status, 404);
   assert.equal((await fetch(`${base}/gallery/photos/${replaced.id}/${replaced.file}`)).status, 200);
+  const linked = await (await fetch(`${base}/gallery/${replaced.id}`)).text();
+  assert.match(linked, new RegExp(`data-open-photo="${replaced.id}"`));
+  assert.match(linked, new RegExp(`data-gallery-image="/gallery/photos/${replaced.id}/${replaced.file}"`));
   await assert.rejects(fs.stat(path.join(uploadDir, 'gallery', saved[0].file)), { code: 'ENOENT' });
   assert.equal((await fs.readdir(path.join(uploadDir, 'gallery-staging'))).length, 0);
   assert.equal((await fs.readdir(path.join(uploadDir, 'gallery'))).length, 4);
@@ -412,6 +430,11 @@ test('gallery enforces exactly 100 uploads and accepts a full captioned batch be
   assert.equal((first.match(/data-gallery-photo/g) || []).length, 24);
   const last = await (await fetch(`${base}/gallery?page=5`)).text();
   assert.equal((last.match(/data-gallery-photo/g) || []).length, 4);
+  const linked = await (await fetch(`${base}/gallery/${saved[99].id}?page=1`)).text();
+  assert.match(linked, /data-page="5"/);
+  assert.match(linked, new RegExp(`data-open-photo="${saved[99].id}"`));
+  assert.equal((linked.match(/data-gallery-photo/g) || []).length, 4);
+  assert.equal((await fetch(`${base}/gallery/not-found`)).status, 404);
   assert.equal((await uploadGallery(base, cookie, token, [file])).status, 201);
 });
 
