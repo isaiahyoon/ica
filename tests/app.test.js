@@ -108,41 +108,85 @@ async function publishGallery(base, cookie, token, photos) {
   });
 }
 
-test('gallery viewer opens the selected image and captions and closes with Escape', async () => {
+async function galleryViewerHarness({ fetchPage, hash = '' } = {}) {
   const source = await fs.readFile(new URL('../public/scripts/gallery.js', import.meta.url), 'utf8');
   const viewerEvents = new Map();
-  const linkEvents = new Map();
   const image = { removeAttribute(name) { delete this[name]; } };
-  const clonedCaption = {};
+  const previous = { events: new Map(), addEventListener(name, fn) { this.events.set(name, fn); } };
+  const next = { events: new Map(), addEventListener(name, fn) { this.events.set(name, fn); } };
+  const status = {};
   let shownCaption;
+  const makeLink = (id) => {
+    const figure = {
+      id: `gallery-photo-${id}`,
+      scrollIntoView(options) { this.scrolled = options.block; },
+      querySelector() { return { cloneNode() { return { id }; } }; },
+    };
+    return {
+      href: `/gallery/photos/${id}/image.webp`, events: new Map(),
+      addEventListener(name, fn) { this.events.set(name, fn); },
+      querySelector() { return { alt: `Photo ${id}` }; },
+      closest() { return figure; },
+      focus() { this.focused = true; },
+    };
+  };
+  const pageLinks = new Map([[1, [makeLink(1), makeLink(2)]], [2, [makeLink(3), makeLink(4)]], [3, [makeLink(5)]]]);
+  const selectors = {
+    img: image, '[data-gallery-previous]': previous, '[data-gallery-next]': next,
+    '[data-gallery-viewer-status]': status,
+    '.gallery-viewer-caption': { replaceChildren(caption) { shownCaption = caption; } },
+  };
   const viewer = {
-    open: false,
+    open: false, dataset: { page: '1', pages: '3' },
     showModal() { this.open = true; },
     close() { this.open = false; viewerEvents.get('close')(); },
     addEventListener(name, fn) { viewerEvents.set(name, fn); },
-    querySelector(selector) {
-      return selector === 'img' ? image : { replaceChildren(caption) { shownCaption = caption; } };
-    },
+    querySelector(selector) { return selectors[selector]; },
+    getBoundingClientRect() { return { left: 100, right: 500, top: 100, bottom: 500 }; },
   };
-  const link = {
-    href: '/gallery/photos/photo/image.webp',
-    addEventListener(name, fn) { linkEvents.set(name, fn); },
-    querySelector() { return { alt: 'Church family' }; },
-    closest() { return { querySelector() { return { cloneNode() { return clonedCaption; } }; } }; },
-  };
+  const requests = [];
+  const windowEvents = new Map();
+  const locations = [];
   runInNewContext(source, {
-    document: { querySelector() { return viewer; }, querySelectorAll() { return [link]; } },
+    document: { querySelector() { return viewer; }, querySelectorAll() { return pageLinks.get(1); } },
+    window: {
+      location: { hash, assign(url) { locations.push(url); } },
+      addEventListener(name, fn) { windowEvents.set(name, fn); },
+    },
+    AbortController,
+    fetch: async (url, options) => {
+      requests.push(url);
+      return fetchPage ? fetchPage(url, options) : { ok: true, text: async () => url.slice(-1) };
+    },
+    DOMParser: class {
+      parseFromString(html) {
+        return {
+          querySelector() { return { dataset: { page: html } }; },
+          querySelectorAll() { return pageLinks.get(Number(html)) ?? []; },
+        };
+      }
+    },
   });
+  return {
+    viewer, image, previous, next, status, requests, viewerEvents, pageLinks, locations, windowEvents,
+    get caption() { return shownCaption; },
+  };
+}
+
+test('gallery viewer opens the selected image and captions and closes with Escape', async () => {
+  const state = await galleryViewerHarness();
+  const { viewer, image, viewerEvents } = state;
+  const link = state.pageLinks.get(1)[0];
   let prevented = false;
   const click = { preventDefault() { prevented = true; } };
-  linkEvents.get('click')({ ...click, ctrlKey: true });
+  link.events.get('click')({ ...click, ctrlKey: true });
   assert.equal(viewer.open, false);
   assert.equal(prevented, false);
-  linkEvents.get('click')(click);
+  link.events.get('click')(click);
   assert.equal(viewer.open, true);
   assert.equal(image.src, link.href);
-  assert.equal(image.alt, 'Church family');
-  assert.equal(shownCaption, clonedCaption);
+  assert.equal(image.alt, 'Photo 1');
+  assert.equal(state.caption.id, 1);
   assert.equal(prevented, true);
   viewerEvents.get('keydown')({ key: 'Tab' });
   assert.equal(viewer.open, true);
@@ -151,6 +195,102 @@ test('gallery viewer opens the selected image and captions and closes with Escap
   assert.equal(prevented, true);
   assert.equal(viewer.open, false);
   assert.equal(image.src, undefined);
+});
+
+test('gallery viewer arrow buttons and keys cross pages in both directions and stop at gallery boundaries', async () => {
+  const state = await galleryViewerHarness();
+  const { previous, next, viewerEvents, image } = state;
+  state.pageLinks.get(1)[0].events.get('click')({ preventDefault() {} });
+  assert.equal(previous.disabled, true);
+  await previous.events.get('click')();
+  assert.equal(image.alt, 'Photo 1');
+  await viewerEvents.get('keydown')({ key: 'ArrowRight', preventDefault() {} });
+  assert.equal(image.alt, 'Photo 2');
+  await next.events.get('click')();
+  assert.equal(image.alt, 'Photo 3');
+  assert.equal(state.caption.id, 3);
+  assert.match(state.status.textContent, /Page 2\/3/);
+  await next.events.get('click')();
+  await next.events.get('click')();
+  assert.equal(image.alt, 'Photo 5');
+  assert.equal(next.disabled, true);
+  await next.events.get('click')();
+  assert.equal(image.alt, 'Photo 5');
+  await viewerEvents.get('keydown')({ key: 'ArrowLeft', preventDefault() {} });
+  assert.equal(image.alt, 'Photo 4');
+  await previous.events.get('click')();
+  await previous.events.get('click')();
+  assert.equal(image.alt, 'Photo 2');
+  assert.deepEqual(state.requests, ['/gallery?page=2', '/gallery?page=3']);
+});
+
+test('gallery viewer reports loading errors, allows retry, and ignores pending navigation after closing', async () => {
+  let succeed = false;
+  const state = await galleryViewerHarness({
+    fetchPage: async () => ({ ok: succeed, text: async () => '2' }),
+  });
+  state.pageLinks.get(1)[1].events.get('click')({ preventDefault() {} });
+  await state.next.events.get('click')();
+  assert.match(state.status.textContent, /Could not load photos/);
+  assert.equal(state.image.alt, 'Photo 2');
+  assert.equal(state.next.disabled, false);
+  succeed = true;
+  await state.next.events.get('click')();
+  assert.equal(state.image.alt, 'Photo 3');
+
+  let resolve;
+  let signal;
+  const pending = await galleryViewerHarness({
+    fetchPage: (_url, options) => {
+      signal = options.signal;
+      return new Promise((done) => { resolve = done; });
+    },
+  });
+  pending.pageLinks.get(1)[1].events.get('click')({ preventDefault() {} });
+  const loading = pending.next.events.get('click')();
+  assert.equal(pending.next.disabled, true);
+  pending.viewer.close();
+  assert.equal(signal.aborted, true);
+  pending.pageLinks.get(1)[0].events.get('click')({ preventDefault() {} });
+  resolve({ ok: true, text: async () => '2' });
+  await loading;
+  assert.equal(pending.image.alt, 'Photo 1');
+  assert.equal(pending.next.disabled, false);
+});
+
+test('gallery backdrop closes only for outside clicks and returns to the last viewed photo', async () => {
+  const state = await galleryViewerHarness();
+  const { viewer, viewerEvents } = state;
+  state.pageLinks.get(1)[0].events.get('click')({ preventDefault() {} });
+  const inside = { target: viewer, clientX: 200, clientY: 200 };
+  const outside = { target: viewer, clientX: 10, clientY: 10 };
+  viewerEvents.get('pointerdown')(inside);
+  viewerEvents.get('click')(inside);
+  assert.equal(viewer.open, true);
+  viewerEvents.get('pointerdown')(inside);
+  viewerEvents.get('click')(outside);
+  assert.equal(viewer.open, true);
+  await state.next.events.get('click')();
+  viewerEvents.get('pointerdown')(outside);
+  viewerEvents.get('click')(outside);
+  assert.equal(viewer.open, false);
+  const lastPhoto = state.pageLinks.get(1)[1];
+  assert.equal(lastPhoto.focused, true);
+  assert.equal(lastPhoto.closest().scrolled, 'center');
+  assert.deepEqual(state.locations, []);
+});
+
+test('closing a viewer on another page returns to that page and restores photo focus from the fragment', async () => {
+  const state = await galleryViewerHarness();
+  state.pageLinks.get(1)[1].events.get('click')({ preventDefault() {} });
+  await state.next.events.get('click')();
+  state.viewer.close();
+  assert.deepEqual(state.locations, ['/gallery?page=2#gallery-photo-3']);
+  const returned = await galleryViewerHarness({ hash: '#gallery-photo-2' });
+  returned.windowEvents.get('pageshow')();
+  assert.equal(returned.pageLinks.get(1)[1].focused, true);
+  assert.equal(returned.pageLinks.get(1)[1].closest().scrolled, 'center');
+  assert.equal(returned.viewer.open, false);
 });
 
 test('gallery previews stay private, publishes captions, and edits and replaces without losing metadata', async (t) => {

@@ -366,9 +366,12 @@ a.page-num:hover, a.page-step:hover { background: var(--navy); color: #fff; bord
 .gallery-published-heading { margin-top: 2rem; }
 .gallery-viewer { width: min(1100px, 95vw); max-height: 90vh; padding: 1.25rem; border: 3px solid var(--brass-soft); background: var(--navy-deep); color: var(--paper); }
 .gallery-viewer::backdrop { background: var(--navy-deep); opacity: .9; }
-.gallery-viewer form { text-align: right; margin-bottom: 1rem; }
+.gallery-viewer-controls { display: grid; grid-template-columns: 1fr auto 1fr; gap: .75rem; align-items: center; position: sticky; top: 0; background: var(--navy-deep); }
+.gallery-viewer-controls form { margin: 0; }
+.gallery-viewer-controls .btn { width: 100%; padding: .6rem .5rem; }
+.gallery-viewer [role="status"] { text-align: center; }
 .gallery-viewer img { display: block; max-width: 100%; max-height: 65vh; margin: auto; object-fit: contain; }
-.gallery-viewer-caption { margin-top: 1rem; }
+.gallery-viewer-caption { margin-top: 1rem; text-align: center; }
 .gallery-grid [hidden], .gallery-upload [hidden] { display: none; }
 .sermon:nth-child(3n+2) { --fill: linear-gradient(160deg, #fff, var(--paper) 55%, var(--lavender)); }
 .sermon:nth-child(3n+3) { --fill: linear-gradient(160deg, #fff, var(--paper) 55%, var(--pink)); }
