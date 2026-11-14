@@ -324,6 +324,7 @@ test('gallery previews stay private, publishes captions, and edits and replaces 
   const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
   assert.equal(saved[0].width, 2048);
   assert.equal(saved[0].height, 1024);
+  assert.ok((await fs.stat(path.join(uploadDir, 'gallery', saved[0].file))).size < data.length);
   assert.equal((await fetch(`${base}${drafts[0].preview}`, { redirect: 'manual' })).status, 302);
   assert.equal((await fetch(`${base}/gallery/photos/${saved[0].id}/${saved[0].file}`)).status, 404);
   assert.equal((await fetch(`${base}/gallery/${saved[0].id}`)).status, 404);
@@ -399,6 +400,60 @@ test('gallery previews stay private, publishes captions, and edits and replaces 
   const restored = await (await fetch(`http://localhost:${reopened.address().port}/gallery`)).text();
   assert.match(restored, /Updated\ncaption/);
   assert.match(restored, /수정된 설명/);
+});
+
+test('gallery accepts HEIC and HEIF photos, compresses them, and rejects invalid or oversized images', async (t) => {
+  const { base, close, dataDir, uploadDir } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const token = await csrfToken(base, cookie);
+  const heic = Buffer.from('AAAAJGZ0eXBoZWljAAAAAG1pZjFNaVBybWlhZk1pSEJoZWljAAABw21ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAHBpY3QAAAAAAAAAAAAAAAAAAAAAJGRpbmYAAAAcZHJlZgAAAAAAAAABAAAADHVybCAAAAABAAAADnBpdG0AAAAAAAEAAAA4aWluZgAAAAAAAgAAABVpbmZlAgAAAAABAABodmMxAAAAABVpbmZlAgAAAQACAABFeGlmAAAAABppcmVmAAAAAAAAAA5jZHNjAAIAAQABAAAA5mlwcnAAAADFaXBjbwAAABNjb2xybmNseAACAAIABoAAAAAMY2xsaQDLAEAAAAAUaXNwZQAAAAAAAAAYAAAAEAAAAAlpcm90AAAAABBwaXhpAAAAAAMICAgAAABxaHZjQwEDcAAAALAAAAAAAB7wAPz9+PgAAAsDoAABABdAAQwB//8DcAAAAwCwAAADAAADAB5wJKEAAQAjQgEBA3AAAAMAsAAAAwAAAwAeoBQgQcCLDOIe5FlU3AgIGAKiAAEACUQBwGFyyEBTJAAAABlpcG1hAAAAAAAAAAEAAQaBAgOEBYYAAAAsaWxvYwAAAABEAAACAAEAAAABAAACQwAAADwAAgAAAAEAAAH3AAAATAAAAAFtZGF0AAAAAAAAAJgAAAAGRXhpZgAATU0AKgAAAAgAAwEaAAUAAAABAAAAMgEbAAUAAAABAAAAOgEoAAMAAAABAAIAAAAAAAAAAAAZAAAAAQAAABkAAAABAAAAOCgBr6LyRoF8//50Mev6I//5Pz1X/8lh//vu5/Ng90yyZ/og+cI557vn7lrup8IvYV+CtwhJsiuA', 'base64');
+  for (const [name, type] of [['photo.HEIC', 'image/heic'], ['photo.heif', 'image/heif'], ['photo.heic', 'application/octet-stream']]) {
+    const response = await uploadGallery(base, cookie, token, [{ data: heic, name, type }]);
+    assert.equal(response.status, 201, await response.clone().text());
+  }
+  const rotated = Buffer.from(heic);
+  rotated[rotated.indexOf('irot') + 4] = 3;
+  assert.equal((await uploadGallery(base, cookie, token, [{ data: rotated, name: 'rotated.heic', type: 'image/heic' }])).status, 201);
+  const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json')));
+  assert.equal(saved.length, 4);
+  for (const [index, photo] of saved.entries()) {
+    const output = await fs.readFile(path.join(uploadDir, 'gallery', photo.file));
+    const metadata = await sharp(output).metadata();
+    assert.equal(metadata.format, 'webp');
+    assert.equal(metadata.width, index === 3 ? 16 : 24);
+    assert.equal(metadata.height, index === 3 ? 24 : 16);
+    assert.ok(output.length < heic.length);
+    assert.equal(metadata.exif, undefined);
+  }
+  const html = await (await fetch(`${base}/admin/gallery`, { headers: { cookie } })).text();
+  assert.match(html, /accept="[^"]*\.heic[^"]*\.heif/);
+  assert.equal((await publishGallery(base, cookie, token, [{ id: saved[0].id, captionEn: 'Family' }])).status, 200);
+  const replacementForm = await (await fetch(`${base}/admin/gallery`, { headers: { cookie } })).text();
+  assert.equal((replacementForm.match(/accept="[^"]*\.heic[^"]*\.heif/g) ?? []).length, 2);
+  const replace = await fetch(`${base}/admin/gallery/${saved[0].id}/replace`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie },
+    body: new URLSearchParams({ _csrf: token, stagedPhoto: saved[1].id }),
+  });
+  assert.equal(replace.status, 302);
+  const replaced = JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json'))).find((photo) => photo.id === saved[0].id);
+  assert.equal(replaced.captionEn, 'Family');
+  assert.notEqual(replaced.file, saved[0].file);
+  const png = await sharp({ create: { width: 10, height: 10, channels: 3, background: 'red' } }).png().toBuffer();
+  for (const file of [
+    { data: png, name: 'fake.heic', type: 'image/heic' },
+    { data: Buffer.from('broken'), name: 'broken.heif', type: 'image/heif' },
+    { data: heic.subarray(0, heic.length - 20), name: 'truncated.heic', type: 'image/heic' },
+    { data: heic, name: 'photo.heic', type: 'image/png' },
+  ]) {
+    assert.equal((await uploadGallery(base, cookie, token, [file])).status, 400);
+  }
+  const oversized = Buffer.from(heic);
+  const dimensions = oversized.indexOf('ispe');
+  oversized.writeUInt32BE(10_000, dimensions + 8);
+  oversized.writeUInt32BE(10_000, dimensions + 12);
+  assert.equal((await uploadGallery(base, cookie, token, [{ data: oversized, name: 'large.heic', type: 'image/heic' }])).status, 400);
+  assert.deepEqual(await fs.readdir(path.join(uploadDir, 'gallery-staging')), []);
 });
 
 test('gallery enforces exactly 100 uploads and accepts a full captioned batch beyond ordinary form limits', async (t) => {
