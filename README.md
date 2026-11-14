@@ -41,6 +41,18 @@ To enable Umami, set `UMAMI_WEBSITE_ID` to the website ID from your Umami projec
 
 Other commands: `npm run dev` (auto-restart), `npm test`, `npm run reset-owner-2fa` (clears the owner's authenticator if their phone and recovery codes are both lost). Set `PORT` to change the port.
 
+## Prepare HEIC photos for gallery uploads
+
+On a Mac, build the local drag-and-drop converter once:
+
+```sh
+npm run build-photo-converter
+```
+
+In Finder, drag HEIC or HEIF photos onto **Gallery Photo Converter.app** in the project folder. Alternatively, open the app to choose multiple photos. It processes photos one at a time and saves each JPEG beside its original, even when the photos are in different folders. Originals and existing JPEGs are never overwritten. Every JPEG is strictly under 0.7 MB (700,000 bytes) and fits within the website's 2048 × 2048 display size. Images are never enlarged. The converter uses high JPEG quality and reduces dimensions further if needed to fit the size limit. If `jpegtran` is available on the PATH, lossless JPEG optimization can reduce the file further; otherwise the app reports that optimization is unavailable. Conversion to JPEG and resizing are lossy. The local copies may retain photo metadata; the website strips it when publishing. Errors are reported per photo; no photos are uploaded by this tool. The app requires Node.js and macOS `sips`; rebuild it after changing the converter.
+
+The same converter can be run in the terminal with `npm run prepare-gallery -- "/path/to/photo.heic" "/path/to/another.heif"`.
+
 ## Instagram sermon slides
 
 Different sermons use visibly different compositions, not just changed gradients: the renderer rotates flowing silk, vaulted arches, angular corner fans, and oval medallions by existing image count and batch order, with seeded variations. The assistant must compare the set visually before delivery, especially for batches larger than four. Automated checks compare same-seed compositions to ensure their geometry differs substantially.
