@@ -55,10 +55,12 @@ test('required metadata preserves bilingual and legacy names without inventing t
   assert.deepEqual(postDetails(sermon), {
     title: sermon.title, speaker: 'Pastor John Yoon\n윤태선 목사',
     scripture: '2 Timothy 1:8-12, 16-18\n디모데후서 1:8-12, 16-18',
+    date: 'November 8, 2026\n2026년 11월 8일',
     service: 'Sunday 2nd Service\n주일 2부 예배',
   });
   assert.equal(postDetails({ ...sermon, speakerEn: '', speakerKo: '윤태선 목사' }).speaker, '윤태선 목사');
   assert.equal(postDetails({ title: 'Hope', scripture: 'John 3:16', speaker: 'John Yoon // 윤태선' }).speaker, 'John Yoon\n윤태선');
+  assert.equal(postDetails({ title: 'Hope', scripture: 'John 3:16', speaker: 'John Yoon' }).date, '');
   for (const invalid of [{ title: '' }, { title: ' '.repeat(140) }, { title: 'x'.repeat(141) },
     { scripture: '' }, { scripture: 'x'.repeat(101) }, { speakerEn: '', speakerKo: '' },
     { speakerEn: 'x'.repeat(101) }, { speakerEn: 42 }]) {
@@ -194,6 +196,7 @@ test('renderer produces high-resolution portrait JPEGs with safe bilingual text 
     ['service', '', 'Sunday 2nd Service'],
     ['title', 'Hope\n소망', 'The Path of the Grain of Wheat'],
     ['scripture', 'John 3:16\n요한복음 3:16', '2 Timothy 1:8-12, 16-18'],
+    ['date', '2026-11-15', 'November 8, 2026'],
     ['speakerEn', 'Another saved speaker', 'Pastor John Yoon'],
   ]) {
     const changed = await renderInstagramPost({ ...sermon, [field]: value }, { seed: 'first' });
@@ -267,7 +270,7 @@ test('artwork typography separates languages and uses measured, non-overlapping 
     assert.equal(layers.at(-1).top + layers.at(-1).height, 2580, 'footer must end 60 logical pixels above the bottom');
     assert.ok(layers.at(-2).height < layers.find(({ text }) => text === 'Pastor John Yoon').height,
       'founding year must be understated relative to sermon metadata');
-    for (const text of ['2 Timothy 1:8-12, 16-18', 'Pastor John Yoon']) {
+    for (const text of ['2 Timothy 1:8-12, 16-18', 'November 8, 2026', 'Pastor John Yoon']) {
       const index = layers.findIndex((layer) => layer.text === text);
       const previous = layers[index - 1];
       assert.ok(layers[index].top - previous.top - previous.height >= 120,

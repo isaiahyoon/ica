@@ -40,6 +40,8 @@ Typography must be graceful and airy: balanced title lines without orphan words,
 
 Keep the lettering solemn, serious, and stately, befitting the Gospel. All text groups must share the canvas centerline, never individually offset to accommodate decoration. Use restrained ivory (`--paper`) consistently for every text row; reserve pastel and metallic accents for the artwork. Preserve a dark, clear centered text area and inspect alignment and contrast in every finished slide.
 
+Show the saved sermon date on every slide in English and Korean, between Scripture and speaker. Use the same centered, readable metadata styling and never replace the saved date with the generation date.
+
 Prioritize older viewers: use the shared enlarged layout, at least 32 logical pixels for secondary sermon metadata, lightly reinforced serif strokes, and comfortable line/language spacing. The understated bottom footer is the exception, using 26/24 logical pixels. Do not shrink dense metadata below its minimum. Inspect each finished image at phone size; full-resolution readability alone is insufficient.
 
 When the user approves image generation, follow "Sermon-informed artwork" above, generate one distinct text-free background per sermon with a calm dark central text area, and add its local absolute path as `backgroundPath` in that input entry. The renderer overlays exact bilingual metadata locally, without procedural decorations. The local renderer itself does not call an image service.

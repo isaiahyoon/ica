@@ -1098,6 +1098,7 @@ test('sermon fields preserve line breaks and service through upload and editing'
   }
   const services = [
     'Sunday 1st Service 주일 1부 예베', 'Sunday 2nd Service 주일 2부 예배',
+    'Sunday 3rd Service 주일 3부 예배',
     'Wednesday Service 수요예배', 'Friday Service 금요예배',
   ];
   const select = admin.match(/<select name="service"[^>]*>([\s\S]*?)<\/select>/)?.[1];
