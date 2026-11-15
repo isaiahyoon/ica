@@ -1212,7 +1212,7 @@ test('sermon link previews use the sermon title and passage reference, not verse
   const { base, dataDir, close } = await boot();
   t.after(close);
   const sermons = [
-    { id: 'english', title: 'Grace', scripture: 'John 3:16', service: '1st Sunday Service' },
+    { id: 'english', title: 'Grace', scripture: 'John 3:16', date: '2026-11-08', service: '1st Sunday Service' },
     { id: 'bilingual', title: '사랑 · Love', scripture: 'Song of Songs 1:1 (아가서 1:1)', service: 'Sunday Worship\n주일 예배' },
     { id: 'escaped', title: 'Grace & "Truth" <hope>', scripture: 'John 3:16 & "요한복음" <3:16>', service: 'Service & <hope>' },
     { id: 'no-reference', title: 'Hope' },
@@ -1247,7 +1247,7 @@ test('sermon link previews use the sermon title and passage reference, not verse
     const imageUrl = head.match(/<meta property="og:image" content="([^"]+)">/)[1];
     assert.match(imageUrl, new RegExp(`^https://immanuelchurchofamerica.org/sermons/${sermon.id}/preview\\.png\\?v=[a-f\\d]{20}$`));
     assert.ok(head.includes(`<meta name="twitter:image" content="${imageUrl}">`));
-    assert.ok(head.includes(`<meta property="og:image:alt" content="${escapeAttribute([sermon.title, displayReference, sermon.service].filter(Boolean).join(' · '))}">`));
+    assert.ok(head.includes(`<meta property="og:image:alt" content="${escapeAttribute([sermon.title, displayReference, sermon.date, sermon.service].filter(Boolean).join(' · '))}">`));
     const image = await fetch(base + new URL(imageUrl).pathname + new URL(imageUrl).search);
     assert.equal(image.status, 200);
     assert.equal(image.headers.get('content-type'), 'image/png');
@@ -1291,13 +1291,20 @@ test('sermon link previews use the sermon title and passage reference, not verse
   const servicePage = await (await fetch(`${base}/sermons/english`)).text();
   assert.notEqual(servicePage.match(/property="og:image" content="([^"]+)"/)[1], updatedPage.match(/property="og:image" content="([^"]+)"/)[1]);
   assert.notDeepEqual(Buffer.from(await (await fetch(`${base}/sermons/english/preview.png`)).arrayBuffer()), previousImage);
+  const beforeDateChange = await (await fetch(`${base}/sermons/english`)).text();
+  const previousDateImage = Buffer.from(await (await fetch(`${base}/sermons/english/preview.png`)).arrayBuffer());
+  sermons[0].date = '2026-11-15';
+  await fs.writeFile(path.join(dataDir, 'sermons.json'), JSON.stringify(sermons));
+  const datePage = await (await fetch(`${base}/sermons/english`)).text();
+  assert.notEqual(datePage.match(/property="og:image" content="([^"]+)"/)[1], beforeDateChange.match(/property="og:image" content="([^"]+)"/)[1]);
+  assert.notDeepEqual(Buffer.from(await (await fetch(`${base}/sermons/english/preview.png`)).arrayBuffer()), previousDateImage);
   await fs.writeFile(path.join(dataDir, 'sermons.json'), JSON.stringify(sermons.slice(1)));
   assert.equal((await fetch(`${base}/sermons/english/preview.png`)).status, 404);
 });
 
 test('preview pixels contain title, reference, and service independently within the original artwork', async () => {
   const render = createSermonPreviewRenderer();
-  const original = { title: 'Grace', scripture: 'John 3:16', service: '1st Sunday Service', description: 'Not in the image' };
+  const original = { title: 'Grace', scripture: 'John 3:16', date: '2026-11-08', service: '1st Sunday Service', description: 'Not in the image' };
   const first = await render(original);
   assert.deepEqual(await render({ ...original, description: 'Different description' }), first);
   assert.deepEqual(
@@ -1308,16 +1315,20 @@ test('preview pixels contain title, reference, and service independently within 
     .extract({ left: 60, top, width: 540, height }).raw().toBuffer();
   const newTitle = await render({ ...original, title: 'Hope' });
   const newReference = await render({ ...original, scripture: 'Romans 8:28' });
+  const newDate = await render({ ...original, date: '2026-11-15' });
   const newService = await render({ ...original, service: 'Evening Service' });
   const noService = await render({ ...original, service: '' });
   assert.notDeepEqual(await pixels(first, 228, 155), await pixels(newTitle, 228, 155));
   assert.deepEqual(await pixels(first, 410, 80), await pixels(newTitle, 410, 80));
   assert.notDeepEqual(await pixels(first, 410, 80), await pixels(newReference, 410, 80));
   assert.deepEqual(await pixels(first, 228, 155), await pixels(newReference, 228, 155));
-  assert.notDeepEqual(await pixels(first, 523, 65), await pixels(newService, 523, 65));
-  assert.notDeepEqual(await pixels(first, 523, 65), await pixels(noService, 523, 65));
+  assert.notDeepEqual(await pixels(first, 490, 60), await pixels(newDate, 490, 60));
+  assert.deepEqual(await pixels(first, 228, 155), await pixels(newDate, 228, 155));
+  assert.notDeepEqual(await pixels(first, 553, 65), await pixels(newService, 553, 65));
+  assert.notDeepEqual(await pixels(first, 553, 65), await pixels(noService, 553, 65));
   assert.deepEqual(await pixels(first, 228, 155), await pixels(newService, 228, 155));
   assert.deepEqual(await pixels(first, 410, 80), await pixels(newService, 410, 80));
+  assert.deepEqual(await pixels(first, 490, 60), await pixels(noService, 490, 60));
   const artworkRegion = (input) => sharp(input).extract({ left: 720, top: 0, width: 480, height: 630 }).removeAlpha().raw().toBuffer();
   assert.deepEqual(await artworkRegion(first), await artworkRegion(new URL('../public/link-preview.png', import.meta.url).pathname));
 });

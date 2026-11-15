@@ -172,7 +172,7 @@ export function createApp({
       title: sermon.title, active: 'sermons',
       description: sermon.scripture ? formatScriptureReference(sermon.scripture) : 'Listen to this sermon. 설교를 들어 보세요.',
       previewImage: `https://immanuelchurchofamerica.org/sermons/${encodeURIComponent(sermon.id)}/preview.png?v=${sermonPreviewVersion(sermon)}`,
-      previewImageAlt: [sermon.title, formatScriptureReference(sermon.scripture), sermon.service].filter(Boolean).join(' · '),
+      previewImageAlt: [sermon.title, formatScriptureReference(sermon.scripture), sermon.date, sermon.service].filter(Boolean).join(' · '),
       body: view.sermonsPage({
         sermons: [sermon], pager: { current: 1, pages: 1 }, single: true,
         admin, csrfToken: admin ? auth.csrfToken(req) : '',
