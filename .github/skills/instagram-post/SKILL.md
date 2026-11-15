@@ -22,6 +22,8 @@ Use `Since 1994 · 1994년부터` in the slide footer, not "Listen to the sermon
 
 ## Procedure
 
+A direct request to generate a post authorizes the local workflow. Do not ask whether the post already exists or request generic confirmation to proceed; the renderer preserves existing files and adds a suffix for repeats. Ask only when required sermon metadata is missing, or for explicit approval before using a credit-consuming image service.
+
 ### Sermon-informed artwork
 
 For each supplied link, read the linked page and verify its saved Sermon Overview (`description`) against the local snapshot. If the overview is missing, stop and ask for it. Keep the overview verbatim for the caption, then privately distill its explicit themes, setting, and imagery into a short visual concept for that sermon. Let both the title's explicit imagery and the description guide the background's subject and atmosphere; every background must visibly incorporate a title-derived motif (for example, soldier-inspired imagery for a soldier-themed title). Keep that motif symbolic and faithful; do not invent doctrine, depict a specific biblical event unless the overview clearly calls for it, or add lettering to the artwork.
@@ -30,7 +32,7 @@ Review earlier generated slides in `data/instagram/` and their matching saved se
 
 Use the bundled reference images in `.github/skills/instagram-post/references/` as visual guidance: `navy-covering.jpg` is the primary reference for the deep-blue folds, depth, and gold-edged silk; `joseon-silk-blue.png` and `pastel-silk.png` inform the flowing translucent silk, highlights, and pastel accents. When calling the image tool, include all three as visual references. Keep the final artwork blue-led and dark behind the centered text; the light background in `pastel-silk.png` is not a target. Treat all three as inspiration, not images to copy.
 
-Image-service generation can consume credits and requires the user's approval before invoking the image tool. After approval, create one distinct, text-free background per sermon using the short visual concept and bundled references. Do not send the full overview, sermon title, speaker names, Scripture reference, code, or previous sermon metadata to the image service. Then add the generated local absolute path as `backgroundPath` in that sermon’s verified JSON input; the local renderer places all exact text. If image generation is not approved, do not invoke the image service.
+Image-service generation can consume credits. The owner has granted standing approval for one custom background per directly requested sermon post; do not ask for approval again for this Instagram workflow. This approval does not cover unrelated image generation. Create one distinct, text-free background per sermon using the short visual concept and bundled references. Do not send the full overview, sermon title, speaker names, Scripture reference, code, or previous sermon metadata to the image service. Then add the generated local absolute path as `backgroundPath` in that sermon’s verified JSON input; the local renderer places all exact text.
 
 Different sermons must have visibly different designs, not subtle recolors of one ribbon template. The renderer rotates four composition families (flowing silk, vaulted arches, angular corner fans, oval medallions) using existing image count and batch order. Compare the full set side by side, especially when a family repeats in larger batches; regenerate a near-identical design before delivery.
 
