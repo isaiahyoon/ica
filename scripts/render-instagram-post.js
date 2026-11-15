@@ -2,21 +2,13 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { postCaption, postDetails, postHashtags, renderInstagramPost, sermonLink } from '../lib/instagram-post.js';
+import { postCaption, postDetails, postHashtags, renderInstagramPost, savedSermonDate, sermonLink } from '../lib/instagram-post.js';
 import { splitBilingual } from '../lib/sermon-metadata.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
 export function postFileStem(sermon) {
-  let date = 'undated';
-  if (sermon.date != null && sermon.date !== '') {
-    if (typeof sermon.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(sermon.date)
-      || !Number.isFinite(Date.parse(sermon.date))
-      || new Date(sermon.date).toISOString().slice(0, 10) !== sermon.date) {
-      throw new TypeError('Sermon date must be a valid YYYY-MM-DD date.');
-    }
-    date = sermon.date;
-  }
+  const date = savedSermonDate(sermon.date) || 'undated';
   const { en, ko } = splitBilingual(sermon.service);
   const service = (en || ko).normalize('NFKC').toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '');

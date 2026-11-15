@@ -59,8 +59,8 @@ test('required metadata preserves bilingual and legacy names without inventing t
     service: 'Sunday 2nd Service\n주일 2부 예배',
   });
   assert.equal(postDetails({ ...sermon, speakerEn: '', speakerKo: '윤태선 목사' }).speaker, '윤태선 목사');
-  assert.equal(postDetails({ title: 'Hope', scripture: 'John 3:16', speaker: 'John Yoon // 윤태선' }).speaker, 'John Yoon\n윤태선');
-  assert.equal(postDetails({ title: 'Hope', scripture: 'John 3:16', speaker: 'John Yoon' }).date, '');
+  assert.equal(postDetails({ title: 'Hope', scripture: 'John 3:16', speaker: 'John Yoon // 윤태선', date: '2026-11-08' }).speaker, 'John Yoon\n윤태선');
+  assert.throws(() => postDetails({ title: 'Hope', scripture: 'John 3:16', speaker: 'John Yoon' }), /saved sermon date/);
   for (const invalid of [{ title: '' }, { title: ' '.repeat(140) }, { title: 'x'.repeat(141) },
     { scripture: '' }, { scripture: 'x'.repeat(101) }, { speakerEn: '', speakerKo: '' },
     { speakerEn: 'x'.repeat(101) }, { speakerEn: 42 }]) {
