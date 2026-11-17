@@ -502,7 +502,10 @@ input:focus, textarea:focus, select:focus { outline: 3px solid rgba(63,127,166,.
 
 @media (max-width: 560px) {
   body { font-size: 16px; }
-  .site-header { justify-content: center; }
+  .site-header { justify-content: center; padding: .5rem; gap: .4rem; }
+  .site-header nav { display: grid; width: 100%; grid-template-columns: repeat(auto-fit, minmax(max(3.75rem, 19%), 1fr)); gap: 0; }
+  .site-header nav a { display: flex; align-items: center; justify-content: center; min-height: 48px; padding: .25rem 0; font-size: clamp(.8125rem, 3.6vw, .9375rem); }
+  .site-header nav .bilingual { align-items: center; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }

@@ -774,6 +774,25 @@ test('public pages render, landing is the information page', async (t) => {
   assert.equal((await fetch(base + '/nope')).status, 404);
 });
 
+test('mobile header keeps bilingual navigation compact with accessible touch targets', async (t) => {
+  const { base, close } = await boot();
+  t.after(close);
+  const html = await (await fetch(`${base}/sermons`)).text();
+  const header = html.match(/<header class="site-header">([\s\S]*?)<\/header>/)?.[1];
+  assert.ok(header);
+  for (const [href, en, ko] of [
+    ['/', 'Welcome', '환영합니다'], ['/about', 'About', '소개'], ['/sermons', 'Sermons', '설교'],
+    ['/gallery', 'Gallery', '갤러리'], ['/contact', 'Contact', '연락처'],
+  ]) {
+    assert.match(header, new RegExp(`href="${href}"[^>]*><span class="bilingual"><span lang="en">${en}</span><span lang="ko">${ko}</span>`));
+  }
+  assert.match(header, /href="\/sermons" aria-current="page" class="is-active"/);
+  const css = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  const mobile = css.slice(css.indexOf('@media (max-width: 560px)'), css.indexOf('@media (prefers-reduced-motion: reduce)'));
+  assert.match(mobile, /\.site-header nav\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(max\(3\.75rem,\s*19%\),\s*1fr\)\)/s);
+  assert.match(mobile, /\.site-header nav a\s*\{[^}]*min-height:\s*48px/s);
+});
+
 test('Umami tracks public rendered pages only when configured', async (t) => {
   const { base, close } = await boot({
     umamiWebsiteId: 'site-id" data-injected="no',
