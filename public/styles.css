@@ -332,16 +332,18 @@ nav a:focus-visible { box-shadow: inset 0 0 0 2px var(--brass-soft); }
 .page-head form { margin-top: .25rem; }
 .sermon-filter { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem 2rem; margin: 0 0 1.75rem; padding: .25rem 0; color: var(--navy); }
 .sermon-filter > p { margin: 0; font-size: .95rem; }
-.service-picker { position: relative; z-index: 2; flex: 0 1 23rem; min-width: 0; width: 100%; }
-.service-picker > summary { --plate: var(--gold); --fill: var(--navy); --rim: 2px; display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; padding: 1rem 1.25rem; color: var(--paper); cursor: pointer; list-style: none; }
+.service-picker { position: relative; z-index: 2; flex: 0 1 20rem; min-width: 0; width: 100%; }
+.service-picker > summary { --plate: var(--silver); --fill: linear-gradient(120deg, var(--sky), var(--pink)); --rim: 2px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .65rem 1rem; border-radius: .65rem; font-size: .95rem; color: var(--navy); cursor: pointer; list-style: none; }
+.service-picker > summary::before { border-radius: calc(.65rem - var(--rim)); }
 .service-picker > summary::-webkit-details-marker { display: none; }
-.service-picker > summary::after { content: ""; flex: 0 0 .45rem; height: .45rem; border-right: 1px solid var(--brass-soft); border-bottom: 1px solid var(--brass-soft); transform: rotate(45deg); margin: -.25rem .25rem 0; }
+.service-picker > summary::after { content: ""; flex: 0 0 .45rem; height: .45rem; border-right: 1px solid var(--navy); border-bottom: 1px solid var(--navy); transform: rotate(45deg); margin: -.25rem .25rem 0; }
 .service-picker[open] > summary::after { transform: rotate(225deg); margin-top: .25rem; }
-.service-picker > summary:hover { --fill: var(--navy-deep); }
+.service-picker > summary:hover { --fill: linear-gradient(120deg, var(--blue), var(--pink)); }
 .service-picker > summary:focus-visible { --plate: linear-gradient(var(--focus), var(--focus)); --rim: 4px; outline: 2px solid var(--focus); outline-offset: 3px; }
-.service-options { --plate: var(--silver); --fill: var(--paper); --rim: 2px; position: absolute; inset: calc(100% + .5rem) 0 auto; margin: 0; padding: .5rem; list-style: none; box-shadow: var(--shadow); max-height: min(32rem, 65vh); overflow-y: auto; }
+.service-options { --plate: var(--silver); --fill: var(--paper); --rim: 2px; position: absolute; inset: calc(100% + .5rem) 0 auto; margin: 0; padding: .5rem; border-radius: .65rem; list-style: none; box-shadow: var(--shadow); max-height: min(32rem, 65vh); overflow-y: auto; }
+.service-options::before { border-radius: calc(.65rem - var(--rim)); }
 .service-options li + li { border-top: 1px solid var(--line); }
-.service-options a { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 1rem; color: var(--navy); text-decoration: none; }
+.service-options a { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 1rem; border-radius: .4rem; color: var(--navy); text-decoration: none; }
 .service-options a[aria-current] { background: linear-gradient(120deg, var(--sky), var(--canvas)); box-shadow: inset 3px 0 var(--brass); }
 .service-options a[aria-current]::after { content: "✓"; color: var(--navy); }
 .service-options a:hover { background: linear-gradient(120deg, var(--blue), var(--lavender)); }
