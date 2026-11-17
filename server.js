@@ -11,7 +11,7 @@ import { mountAdminAuth } from './lib/admin-routes.js';
 import { mountGallery } from './lib/gallery-routes.js';
 import * as view from './lib/render.js';
 import { formatScriptureReference } from './lib/scripture-links.js';
-import { splitBilingual } from './lib/sermon-metadata.js';
+import { SERMON_SERVICE_FILTERS, sermonServiceType, splitBilingual } from './lib/sermon-metadata.js';
 import { createSermonPreviewRenderer, sermonPreviewVersion } from './lib/sermon-preview.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -138,9 +138,17 @@ export function createApp({
   const sortSermons = (list) => [...list].sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.createdAt.localeCompare(a.createdAt));
 
   app.get('/sermons', async (req, res) => {
-    const sermons = sortSermons(await store.read('sermons'));
+    const service = req.query.service ?? '';
+    if (typeof service !== 'string' || (service && !SERMON_SERVICE_FILTERS.some(({ id }) => id === service))) {
+      return res.status(400).send(renderPage(req, {
+        title: 'Sermons', active: 'sermons',
+        body: view.messagePage({ title: 'Please choose a listed service. · 목록에서 예배를 선택해 주세요.', text: '' }),
+      }));
+    }
+    const sermons = sortSermons(await store.read('sermons'))
+      .filter((sermon) => !service || sermonServiceType(sermon.service) === service);
     const admin = auth.isAdmin(req);
-    page(req, res, { title: 'Sermons', active: 'sermons', body: view.sermonsPage({ ...(({ items, ...p }) => ({ sermons: items, pager: p }))(paginate(sermons, req, SERMONS_PER_PAGE)), admin, csrfToken: admin ? auth.csrfToken(req) : '' }) });
+    page(req, res, { title: 'Sermons', active: 'sermons', body: view.sermonsPage({ ...(({ items, ...p }) => ({ sermons: items, pager: p }))(paginate(sermons, req, SERMONS_PER_PAGE)), service, admin, csrfToken: admin ? auth.csrfToken(req) : '' }) });
   });
 
   app.get('/sermons/:id/preview.png', async (req, res, next) => {

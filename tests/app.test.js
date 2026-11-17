@@ -878,6 +878,105 @@ test('configured storage paths serve persistent sermon data and uploads', async 
   assert.equal((await fetch(`${base}/uploads/photos/persisted.png`)).status, 404);
 });
 
+test('sermon service filters match saved bilingual and legacy labels before pagination', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  const services = [
+    ['sunday-1', 'Sunday 1st Service 주일 1부 예베'],
+    ['sunday-1', '주일 1부 예배'],
+    ['sunday-2', 'Sunday 2nd Service // 주일 2부 예배'],
+    ['sunday-3', 'Sunday 3rd Service\n주일 3부 예배'],
+    ['wednesday', 'Wednesday Service 수요예배'],
+    ['friday', 'Friday Service 금요예배'],
+    ['friday', ' FRIDAY SERVICE '],
+    ['friday', '금요 예배'],
+    ['', undefined],
+    ['', 'Special Service'],
+    ['', 'Sunday 1st Service // 금요예배'],
+    ...Array.from({ length: 10 }, () => ['sunday-1', 'Sunday 1st Service']),
+  ];
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'sermons.json'), JSON.stringify(services.map(([, service], i) => ({
+    id: `filter-${i}`, title: `Message ${i}`, service, file: 'sermon.mp3',
+    date: '2026-11-08', createdAt: new Date(Date.UTC(2026, 10, 8, 0, i)).toISOString(),
+  }))));
+  const ids = (html) => [...html.matchAll(/<article class="sermon" id="sermon-filter-(\d+)">/g)].map((match) => Number(match[1]));
+  const all = await (await fetch(`${base}/sermons`)).text();
+  assert.equal(ids(all).length, 10);
+  assert.ok(all.indexOf('class="sermon-filter"') < all.indexOf('<article class="sermon"'));
+  assert.match(all, /href="\/sermons" aria-current="true"/);
+  for (const service of ['sunday-1', 'sunday-2', 'sunday-3', 'wednesday', 'friday']) {
+    const html = await (await fetch(`${base}/sermons?service=${service}`)).text();
+    const expected = services.flatMap(([type], i) => type === service ? [i] : []).reverse();
+    assert.deepEqual(ids(html), expected.slice(0, 10));
+    assert.ok(html.includes(`href="/sermons?service=${service}" aria-current="true"`));
+    assert.match(html, /<summary aria-describedby="service-filter-label">/);
+    if (expected.length > 10) {
+      assert.match(html, /href="\/sermons\?service=sunday-1&amp;page=2"/);
+      const second = await (await fetch(`${base}/sermons?service=${service}&page=2`)).text();
+      assert.deepEqual(ids(second), expected.slice(10));
+      const clamped = await (await fetch(`${base}/sermons?service=${service}&page=999`)).text();
+      assert.deepEqual(ids(clamped), expected.slice(10));
+    }
+  }
+  const allIds = [];
+  for (const page of [1, 2, 3]) {
+    allIds.push(...ids(await (await fetch(`${base}/sermons?page=${page}`)).text()));
+  }
+  assert.deepEqual(allIds, services.map((_, i) => i).reverse());
+  const single = await (await fetch(`${base}/sermons/filter-0`)).text();
+  assert.doesNotMatch(single, /class="sermon-filter"|scripts\/sermon-filter\.js/);
+});
+
+test('sermon filters handle empty categories and reject invalid service queries explicitly', async (t) => {
+  const { base, close } = await boot();
+  t.after(close);
+  const empty = await (await fetch(`${base}/sermons?service=friday`)).text();
+  assert.match(empty, /No sermons have been shared for this service yet/);
+  assert.match(empty, /이 예배의 설교가 아직 게시되지 않았습니다/);
+  assert.match(empty, /href="\/sermons"[^>]*><span class="bilingual"><span lang="en">All services/);
+  assert.doesNotMatch(empty, /class="pagination"/);
+  for (const query of ['service=unknown', 'service=friday&service=wednesday', 'service%5Bx%5D=friday', 'service=%3Cscript%3E']) {
+    const response = await fetch(`${base}/sermons?${query}`);
+    assert.equal(response.status, 400);
+    assert.match(await response.text(), /Please choose a listed service/);
+  }
+});
+
+test('service dropdown dismisses on Escape, outside clicks, and focus leaving', async () => {
+  const script = await fs.readFile(new URL('../public/scripts/sermon-filter.js', import.meta.url), 'utf8');
+  const events = {};
+  const inside = {};
+  let focused = false;
+  const picker = {
+    open: true,
+    contains: (target) => target === inside,
+    querySelector: () => ({ focus: () => { focused = true; } }),
+    addEventListener: (name, handler) => { events[name] = handler; },
+  };
+  runInNewContext(script, {
+    document: {
+      querySelector: () => picker,
+      addEventListener: (name, handler) => { events[name] = handler; },
+    },
+  });
+  events.click({ target: inside });
+  assert.equal(picker.open, true);
+  events.keydown({ key: 'Tab' });
+  assert.equal(picker.open, true);
+  events.keydown({ key: 'Escape' });
+  assert.equal(picker.open, false);
+  assert.equal(focused, true);
+  picker.open = true;
+  events.click({ target: {} });
+  assert.equal(picker.open, false);
+  picker.open = true;
+  events.focusout({ relatedTarget: inside });
+  assert.equal(picker.open, true);
+  events.focusout({ relatedTarget: null });
+  assert.equal(picker.open, false);
+});
+
 test('sermons can be shared with the native share sheet or copied as a link', async (t) => {
   const { base, dataDir, close } = await boot();
   t.after(close);
