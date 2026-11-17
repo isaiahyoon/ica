@@ -727,6 +727,7 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(aboutCss, /\.about-page \.contact-grid > \.leadership,\s*\.about-page \.contact-grid > \.ministry-team\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s);
   assert.match(aboutCss, /\.about-page \.people li\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(0,\s*1fr\)/s);
   assert.match(aboutCss, /\.about-page \.person-role\s*\{[^}]*text-align:\s*right/);
+  assert.match(aboutCss, /@media \(max-width:\s*680px\)\s*\{[\s\S]*?\.about-page \.person-ko\s*\{[^}]*display:\s*block[^}]*margin-left:\s*0/s);
   assert.match(aboutCss, /@media \(max-width:\s*420px\)\s*\{[^}]*\.about-page \.ministry-team \.people li\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
   assert.match(aboutHtml, /href="\/about" aria-current="page" class="is-active"/);
   const contact = await fetch(`${base}/contact`);

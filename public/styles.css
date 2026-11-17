@@ -310,6 +310,7 @@ nav a:focus-visible { box-shadow: inset 0 0 0 2px var(--brass-soft); }
   .visit-panel .contact-section { text-align: center; }
   .contact-scripture { flex-direction: column; text-align: center; }
   .contact-scripture cite .bilingual { justify-content: center; }
+  .about-page .person-ko { display: block; margin-left: 0; }
 }
 @media (max-width: 420px) {
   .about-page .ministry-team .people li { grid-template-columns: minmax(0, 1fr); }
