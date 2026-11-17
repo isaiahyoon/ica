@@ -348,6 +348,13 @@ nav a:focus-visible { box-shadow: inset 0 0 0 2px var(--brass-soft); }
 .service-options a[aria-current]::after { content: "✓"; color: var(--navy); }
 .service-options a:hover { background: linear-gradient(120deg, var(--blue), var(--lavender)); }
 .service-options a:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; background: var(--canvas); }
+@media (max-width: 680px) {
+  .service-picker { flex: 1 1 100%; }
+  .service-picker[open] > .service-options {
+    position: fixed; inset: auto 1rem 1rem; z-index: 6;
+    max-height: min(32rem, 65vh); max-height: min(32rem, 65dvh);
+  }
+}
 .pagination { display: flex; justify-content: center; align-items: center; gap: .6rem; margin: 2.25rem 0 .4rem; font-family: var(--sans); }
 .page-nums { display: flex; align-items: center; gap: .35rem; }
 .page-num, .page-step {
