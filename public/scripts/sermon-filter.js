@@ -11,6 +11,7 @@ if (servicePicker) {
     }
   });
   servicePicker.addEventListener('focusout', (event) => {
-    if (!servicePicker.contains(event.relatedTarget)) servicePicker.open = false;
+    // Safari can clear focus before a tapped option receives its click.
+    if (event.relatedTarget && !servicePicker.contains(event.relatedTarget)) servicePicker.open = false;
   });
 }

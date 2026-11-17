@@ -727,6 +727,7 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(aboutCss, /\.about-page \.contact-grid > \.leadership,\s*\.about-page \.contact-grid > \.ministry-team\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s);
   assert.match(aboutCss, /\.about-page \.people li\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+minmax\(0,\s*1fr\)/s);
   assert.match(aboutCss, /\.about-page \.person-role\s*\{[^}]*text-align:\s*right/);
+  assert.match(aboutCss, /@media \(max-width:\s*680px\)\s*\{[\s\S]*?\.about-page \.person-ko\s*\{[^}]*display:\s*block[^}]*margin-left:\s*0/s);
   assert.match(aboutCss, /@media \(max-width:\s*420px\)\s*\{[^}]*\.about-page \.ministry-team \.people li\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
   assert.match(aboutHtml, /href="\/about" aria-current="page" class="is-active"/);
   const contact = await fetch(`${base}/contact`);
@@ -772,6 +773,25 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(loginPage, /<form method="post" action="\/admin\/login"/);
   assert.doesNotMatch(loginPage, /href="\/admin(?:\/login)?"/);
   assert.equal((await fetch(base + '/nope')).status, 404);
+});
+
+test('mobile header keeps bilingual navigation compact with accessible touch targets', async (t) => {
+  const { base, close } = await boot();
+  t.after(close);
+  const html = await (await fetch(`${base}/sermons`)).text();
+  const header = html.match(/<header class="site-header">([\s\S]*?)<\/header>/)?.[1];
+  assert.ok(header);
+  for (const [href, en, ko] of [
+    ['/', 'Welcome', '환영합니다'], ['/about', 'About', '소개'], ['/sermons', 'Sermons', '설교'],
+    ['/gallery', 'Gallery', '갤러리'], ['/contact', 'Contact', '연락처'],
+  ]) {
+    assert.match(header, new RegExp(`href="${href}"[^>]*><span class="bilingual"><span lang="en">${en}</span><span lang="ko">${ko}</span>`));
+  }
+  assert.match(header, /href="\/sermons" aria-current="page" class="is-active"/);
+  const css = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  const mobile = css.slice(css.indexOf('@media (max-width: 560px)'), css.indexOf('@media (prefers-reduced-motion: reduce)'));
+  assert.match(mobile, /\.site-header nav\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(max\(3\.75rem,\s*19%\),\s*1fr\)\)/s);
+  assert.match(mobile, /\.site-header nav a\s*\{[^}]*min-height:\s*48px/s);
 });
 
 test('Umami tracks public rendered pages only when configured', async (t) => {
@@ -973,8 +993,34 @@ test('service dropdown dismisses on Escape, outside clicks, and focus leaving', 
   picker.open = true;
   events.focusout({ relatedTarget: inside });
   assert.equal(picker.open, true);
-  events.focusout({ relatedTarget: null });
+  events.focusout({ relatedTarget: {} });
   assert.equal(picker.open, false);
+});
+
+test('service dropdown stays open when a mobile Safari option tap clears focus', async () => {
+  const script = await fs.readFile(new URL('../public/scripts/sermon-filter.js', import.meta.url), 'utf8');
+  const pickerEvents = {};
+  const documentEvents = {};
+  const option = {};
+  const picker = {
+    open: true,
+    contains: (target) => target === option,
+    addEventListener: (name, handler) => { pickerEvents[name] = handler; },
+  };
+  runInNewContext(script, {
+    document: {
+      querySelector: () => picker,
+      addEventListener: (name, handler) => { documentEvents[name] = handler; },
+    },
+  });
+
+  // Safari blurs the summary without focusing the tapped link before mouseup/click.
+  pickerEvents.focusout({ relatedTarget: null });
+  assert.equal(picker.open, true, 'the option must remain visible until its click activates');
+  documentEvents.click({ target: option });
+  assert.equal(picker.open, true);
+  documentEvents.click({ target: {} });
+  assert.equal(picker.open, false, 'outside taps still dismiss the menu');
 });
 
 test('sermons can be shared with the native share sheet or copied as a link', async (t) => {
