@@ -973,8 +973,34 @@ test('service dropdown dismisses on Escape, outside clicks, and focus leaving', 
   picker.open = true;
   events.focusout({ relatedTarget: inside });
   assert.equal(picker.open, true);
-  events.focusout({ relatedTarget: null });
+  events.focusout({ relatedTarget: {} });
   assert.equal(picker.open, false);
+});
+
+test('service dropdown stays open when a mobile Safari option tap clears focus', async () => {
+  const script = await fs.readFile(new URL('../public/scripts/sermon-filter.js', import.meta.url), 'utf8');
+  const pickerEvents = {};
+  const documentEvents = {};
+  const option = {};
+  const picker = {
+    open: true,
+    contains: (target) => target === option,
+    addEventListener: (name, handler) => { pickerEvents[name] = handler; },
+  };
+  runInNewContext(script, {
+    document: {
+      querySelector: () => picker,
+      addEventListener: (name, handler) => { documentEvents[name] = handler; },
+    },
+  });
+
+  // Safari blurs the summary without focusing the tapped link before mouseup/click.
+  pickerEvents.focusout({ relatedTarget: null });
+  assert.equal(picker.open, true, 'the option must remain visible until its click activates');
+  documentEvents.click({ target: option });
+  assert.equal(picker.open, true);
+  documentEvents.click({ target: {} });
+  assert.equal(picker.open, false, 'outside taps still dismiss the menu');
 });
 
 test('sermons can be shared with the native share sheet or copied as a link', async (t) => {
