@@ -42,6 +42,7 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 
 - After every feature update, run the full test suite with `npm test` before finishing, and fix or report any failures.
 - For every new feature, create or update automated tests alongside the implementation to verify its behavior and relevant edge cases; do not consider the feature complete without them.
+- When creating UI tests, include corresponding mobile test cases alongside desktop cases, covering applicable touch interactions and responsive behavior.
 - Tests must be independent and parallel-safe: use a temp directory and an ephemeral port (`listen(0)`) per test, as in `tests/app.test.js`.
 
 ## Code quality and modularity
