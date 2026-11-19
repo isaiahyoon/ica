@@ -88,6 +88,9 @@ export function createApp({
   const pub = path.join(root, 'public');
   const loginLimiter = auth.createLoginLimiter();
   const admins = createAdmins(store, password);
+  const defaultPastors = [{ id: 'john-yoon', en: 'Pastor John Yoon', ko: '윤태선 목사' }];
+  const pastorEntries = (data) => Array.isArray(data) ? defaultPastors : data.entries;
+  const readPastors = async () => pastorEntries(await store.read('pastors'));
 
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
@@ -148,7 +151,7 @@ export function createApp({
     const sermons = sortSermons(await store.read('sermons'))
       .filter((sermon) => !service || sermonServiceType(sermon.service) === service);
     const admin = auth.isAdmin(req);
-    page(req, res, { title: 'Sermons', active: 'sermons', body: view.sermonsPage({ ...(({ items, ...p }) => ({ sermons: items, pager: p }))(paginate(sermons, req, SERMONS_PER_PAGE)), service, admin, csrfToken: admin ? auth.csrfToken(req) : '' }) });
+    page(req, res, { title: 'Sermons', active: 'sermons', body: view.sermonsPage({ ...(({ items, ...p }) => ({ sermons: items, pager: p }))(paginate(sermons, req, SERMONS_PER_PAGE)), service, admin, pastors: admin ? await readPastors() : [], csrfToken: admin ? auth.csrfToken(req) : '' }) });
   });
 
   app.get('/sermons/:id/preview.png', async (req, res, next) => {
@@ -183,7 +186,7 @@ export function createApp({
       previewImageAlt: [sermon.title, formatScriptureReference(sermon.scripture), sermon.date, sermon.service].filter(Boolean).join(' · '),
       body: view.sermonsPage({
         sermons: [sermon], pager: { current: 1, pages: 1 }, single: true,
-        admin, csrfToken: admin ? auth.csrfToken(req) : '',
+        admin, pastors: admin ? await readPastors() : [], csrfToken: admin ? auth.csrfToken(req) : '',
       }),
     });
   });
@@ -205,13 +208,42 @@ export function createApp({
     res.set('Cache-Control', 'no-store');
     res.status(status).send(renderPage(req, {
       title: 'Admin', active: 'admin', admin: true,
-      body: view.adminPage({ sermons, csrfToken: auth.csrfToken(req), ...extra }),
+      body: view.adminPage({ sermons, pastors: await readPastors(), csrfToken: auth.csrfToken(req), ...extra }),
     }));
   };
 
   mountAdminAuth({ app, admins, loginLimiter, adminView, ownerPassword: password });
 
   app.get('/admin', auth.requireAdmin, (req, res) => adminView(req, res, 200, { notice: req.query.notice }));
+
+  app.post('/admin/pastors', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, (req, res, next) => {
+    (async () => {
+      const en = clean(req.body.en, 100);
+      const ko = clean(req.body.ko, 100);
+      if (!en || !ko) return adminView(req, res, 400, { error: { en: 'Enter both pastor names.', ko: '목사 이름을 두 언어로 입력해 주세요.' } });
+      let duplicate = false;
+      await store.update('pastors', (data) => {
+        const entries = pastorEntries(data);
+        duplicate = entries.some((p) => p.en === en && p.ko === ko);
+        return { entries: duplicate ? entries : [...entries, { id: crypto.randomUUID(), en, ko }] };
+      });
+      if (duplicate) return adminView(req, res, 409, { error: { en: 'This pastor is already listed.', ko: '이미 목록에 있는 목사입니다.' } });
+      res.redirect('/admin');
+    })().catch(next);
+  });
+
+  app.post('/admin/pastors/:id/delete', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, (req, res, next) => {
+    (async () => {
+      let found = false;
+      await store.update('pastors', (data) => {
+        const entries = pastorEntries(data);
+        found = entries.some((p) => p.id === req.params.id);
+        return { entries: entries.filter((p) => p.id !== req.params.id) };
+      });
+      if (!found) return adminView(req, res, 404, { error: { en: 'Pastor not found.', ko: '목사를 찾을 수 없습니다.' } });
+      res.redirect('/admin');
+    })().catch(next);
+  });
 
   mountGallery({ app, store, uploadDir, page, renderPage });
 
@@ -325,7 +357,7 @@ export function createApp({
       const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date ?? '') ? req.body.date : '';
       await store.update('sermons', (list) => [...list, {
         id: crypto.randomUUID(), title, date,
-        ...speakerFields(req.body), service: clean(req.body.service, 100), scripture: clean(req.body.scripture, 100),
+        ...speakerFields(req.body), service: clean(req.body.service, 100), scripture: clean(req.body.scripture, 1000),
         description: clean(req.body.description, 10000),
         file: filename, createdAt: new Date().toISOString(),
       }]);
@@ -388,7 +420,7 @@ export function createApp({
       found = true;
       return {
         ...s, title, date,
-        ...speakerFields(req.body), service: clean(req.body.service, 100), scripture: clean(req.body.scripture, 100),
+        ...speakerFields(req.body), service: clean(req.body.service, 100), scripture: clean(req.body.scripture, 1000),
         description: clean(req.body.description, 10000),
       };
     }));

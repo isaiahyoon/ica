@@ -474,6 +474,11 @@ audio { width: 100%; margin-top: .5rem; }
 }
 .form { display: grid; gap: 1rem; }
 .form[hidden] { display: none; }
+.scripture-entry, .scripture-builder { display: grid; gap: .75rem; min-width: 0; }
+.scripture-entry summary { cursor: pointer; color: var(--navy); }
+.scripture-builder { margin-top: .75rem; }
+.scripture-range { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); gap: .75rem; }
+.scripture-builder [role="status"]:empty { display: none; }
 label { display: grid; gap: .55rem; font-weight: 400; color: var(--navy); font-size: .95rem; }
 label small { font-weight: 400; color: var(--muted); }
 input, textarea, select { font: 400 1rem var(--sans); padding: .65rem .8rem; border: 2px solid; border-image: var(--silver) 1; background: #fff; color: var(--text); width: 100%; }

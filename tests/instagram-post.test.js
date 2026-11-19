@@ -60,10 +60,14 @@ test('required metadata preserves bilingual and legacy names without inventing t
   });
   assert.equal(postDetails({ ...sermon, speakerEn: '', speakerKo: '윤태선 목사' }).speaker, '윤태선 목사');
   assert.equal(postDetails({ title: 'Hope', scripture: 'John 3:16', speaker: 'John Yoon // 윤태선', date: '2026-11-08' }).speaker, 'John Yoon\n윤태선');
-  assert.throws(() => postDetails({ title: 'Hope', scripture: 'John 3:16', speaker: 'John Yoon' }), /saved sermon date/);
+  assert.equal(postDetails({ title: 'Hope', scripture: 'John 3:16' }).date, '');
+  assert.deepEqual(postDetails({
+    title: '은혜의 길', scripture: '요한복음 3:16', description: '한국어 설교 개요.',
+  }), {
+    title: '은혜의 길', scripture: '요한복음 3:16', date: '', speaker: '', service: '',
+  });
   for (const invalid of [{ title: '' }, { title: ' '.repeat(140) }, { title: 'x'.repeat(141) },
-    { scripture: '' }, { scripture: 'x'.repeat(101) }, { speakerEn: '', speakerKo: '' },
-    { speakerEn: 'x'.repeat(101) }, { speakerEn: 42 }]) {
+    { scripture: '' }, { scripture: 'x'.repeat(101) }, { speakerEn: 'x'.repeat(101) }, { speakerEn: 42 }]) {
     assert.throws(() => postDetails({ ...sermon, ...invalid }), { name: 'TypeError' });
   }
 });
@@ -238,6 +242,7 @@ test('artwork typography separates languages and uses measured, non-overlapping 
   const c = { paper: '#fbfdfe', sky: '#bed8ea', 'brass-soft': '#dfc681' };
   for (const title of [sermon.title,
     'A Gospel Without Shame, Mercy on the Day of Judgment\n부끄러움없는 복음, 심판날의 긍휼',
+    'The Wall of Wilderness That Follows Obedience, and the Honest Cry Offered Before It\n순종 뒤에 찾아오는 광야의 벽, 그 앞에서 드리는 정직한 부르짖음',
     'Hope\n소망']) {
     const layers = await instagramArtworkTextLayers({ ...sermon, title }, c);
     for (let index = 0; index < layers.length; index += 1) {
@@ -355,4 +360,29 @@ test('local CLI resolves saved sermon links and supports verified JSON with cust
   await assert.rejects(run(['--data-dir', directory, sermon.url.replace(id, 'eb590a2a-e48d-4160-b335-cdff6b3352cc')]), /not in the local store/);
   await fs.writeFile(input, '{broken');
   await assert.rejects(run(['--input', input]), SyntaxError);
+});
+
+test('metadata-only Korean JSON creates a slide without inventing a link, speaker, or date', async (t) => {
+  const directory = await temporary(t);
+  const output = path.join(directory, 'output');
+  const input = path.join(directory, 'korean-sermon.json');
+  const entry = {
+    title: '은혜의 길',
+    scripture: '요한복음 3:16',
+    description: '하나님의 사랑을 전하는 한국어 설교 개요입니다.',
+  };
+  await fs.writeFile(input, JSON.stringify([entry]));
+
+  const layers = await instagramArtworkTextLayers(entry, { paper: '#fbfdfe' });
+  assert.ok(layers.some(({ text }) => text === entry.title));
+  assert.ok(layers.some(({ text }) => text === entry.scripture));
+  assert.ok(!layers.some(({ text }) => /(?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}|\d{4}년 \d{1,2}월 \d{1,2}일/u.test(text)));
+
+  const [result] = await run(['--input', input, '--output', output]);
+  assert.equal(result.url, undefined);
+  assert.equal(result.caption, postCaption(entry.description));
+  assert.deepEqual(result.hashtags, postHashtags());
+  assert.equal(path.basename(result.file), 'sermons-undated-unspecified-service.jpg');
+  assert.deepEqual(await sharp(result.file).metadata().then(({ width, height }) => ({ width, height })),
+    { width: 2160, height: 2700 });
 });

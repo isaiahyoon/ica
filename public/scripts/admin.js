@@ -100,5 +100,96 @@ function initializeAdminConfirmations() {
   });
 }
 
+function initializePastorSelectors() {
+  document.querySelectorAll('[data-pastor-select]').forEach((select) => {
+    select.addEventListener('change', () => {
+      if (!select.value) return;
+      const option = select.selectedOptions[0];
+      select.form.elements.speakerEn.value = option.dataset.en;
+      select.form.elements.speakerKo.value = option.dataset.ko;
+    });
+    for (const field of [select.form.elements.speakerEn, select.form.elements.speakerKo]) {
+      field.addEventListener('input', () => { select.value = ''; });
+    }
+  });
+}
+
+async function initializeScriptureEntries() {
+  const entries = document.querySelectorAll('[data-scripture-entry]');
+  if (!entries.length) return;
+  let counts;
+  try {
+    const response = await fetch('/bible-verses.json');
+    if (!response.ok) throw new Error('Bible reference data unavailable');
+    counts = await response.json();
+  } catch {
+    entries.forEach((entry) => {
+      entry.querySelector('[data-scripture-status]').textContent = 'Could not load the Scripture selector. Enter the reference above. · 성경 선택기를 불러올 수 없습니다. 위에 본문을 입력해 주세요.';
+    });
+    return;
+  }
+  entries.forEach((entry) => {
+    const book = entry.querySelector('[data-book]');
+    const chapter = entry.querySelector('[data-chapter]');
+    const start = entry.querySelector('[data-start]');
+    const end = entry.querySelector('[data-end]');
+    const verses = entry.querySelector('[data-verses]');
+    const reference = entry.querySelector('[name="scripture"]');
+    const status = entry.querySelector('[data-scripture-status]');
+    const populate = (select, count) => {
+      select.replaceChildren();
+      for (let n = 1; n <= count; n++) select.add(new Option(String(n), String(n)));
+      select.disabled = !count;
+    };
+    const updateVerses = () => {
+      const count = counts[Number(book.value)]?.[Number(chapter.value) - 1] || 0;
+      populate(start, count);
+      populate(end, count);
+      verses.value = '';
+    };
+    book.addEventListener('change', () => {
+      populate(chapter, book.value === '' ? 0 : counts[Number(book.value)].length);
+      updateVerses();
+    });
+    chapter.addEventListener('change', updateVerses);
+    start.addEventListener('change', () => { end.value = start.value; });
+    entry.querySelector('[data-add-range]').addEventListener('click', () => {
+      if (!start.value || Number(end.value) < Number(start.value)) {
+        status.textContent = 'Choose a valid verse range. · 올바른 절 범위를 선택해 주세요.';
+        return;
+      }
+      const range = start.value === end.value ? start.value : `${start.value}-${end.value}`;
+      verses.value = [verses.value.trim(), range].filter(Boolean).join(', ');
+      status.textContent = 'Verse added. · 절이 추가되었습니다.';
+    });
+    entry.querySelector('[data-add-passage]').addEventListener('click', () => {
+      const raw = verses.value.trim();
+      const max = Number(end.options.length);
+      const ranges = raw.split(',').map((part) => part.trim());
+      const valid = raw && ranges.every((range) => {
+        const match = range.match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+        return match && Number(match[1]) >= 1 && Number(match[2] || match[1]) >= Number(match[1]) && Number(match[2] || match[1]) <= max;
+      });
+      if (!book.value || !chapter.value || !valid) {
+        status.textContent = 'Choose a book, chapter, and valid verses. · 성경, 장 및 올바른 절을 선택해 주세요.';
+        return;
+      }
+      const option = book.selectedOptions[0];
+      const range = ranges.map((part) => part.replace(/\s*-\s*/g, '-')).join(', ');
+      const passage = `${option.dataset.en} ${chapter.value}:${range} (${option.dataset.ko} ${chapter.value}:${range})`;
+      const combined = [reference.value.trim(), passage].filter(Boolean).join('; ');
+      if (combined.length > reference.maxLength) {
+        status.textContent = 'The Scripture reference is too long. · 성경 본문이 너무 깁니다.';
+        return;
+      }
+      reference.value = combined;
+      verses.value = '';
+      status.textContent = 'Passage added. Choose another book or chapter to add more. · 본문이 추가되었습니다. 다른 성경이나 장을 추가할 수 있습니다.';
+    });
+  });
+}
+
 initializeAudioUploads();
 initializeAdminConfirmations();
+initializePastorSelectors();
+initializeScriptureEntries();
