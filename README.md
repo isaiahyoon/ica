@@ -58,9 +58,9 @@ The same converter can be run in the terminal with `npm run prepare-gallery -- "
 
 The [Instagram post skill](.github/skills/instagram-post/SKILL.md) contains the assistant's full verification, art direction, privacy, and inspection workflow. A direct sermon-post request authorizes one credit-consuming custom background per post; other image generation requires approval. The renderer itself does not call an image service: it overlays exact text locally on a supplied `backgroundPath` or generates procedural artwork.
 
-Ask the assistant: “Create Instagram posts for these sermon links: …” The repository's `instagram-post` skill verifies the linked metadata, creates **one 2160×2700 portrait JPG per link**, and returns each image, a caption, and five hashtags. The caption is the saved **Sermon Overview** verbatim, with a blank line between English and Korean, followed by “Listen to the sermon via the link in our bio.” and “프로필 링크를 통해 설교를 들으실 수 있습니다.” on separate lines. No paraphrasing or invented translations; a missing overview stops generation. Captions appear above the hashtags. The first two hashtags are always `#ImmanuelChurchOfAmerica` and `#미주임마누엘교회`; the remaining three are relevant to the sermon title and/or Scripture.
+Ask the assistant: “Create Instagram posts for these sermon links: …” The repository's `instagram-post` skill verifies the linked metadata, creates **one 2160×2700 portrait JPG per link**, and returns each image, a caption, and five hashtags. For a link-free request, provide the English and Korean sermon titles, Scripture reference, and sermon description. The speaker defaults to Pastor John Yoon / 윤태선 목사, and the sermon date defaults to the request date. Wednesday and Friday requests use their corresponding service; for Sunday, specify the 1st, 2nd, or 3rd service. Korean text is preserved as provided without invented translations. The caption uses the supplied or saved **Sermon Overview** verbatim, followed by “Listen to the sermon via the link in our bio.” and “프로필 링크를 통해 설교를 들으실 수 있습니다.” on separate lines. A missing overview stops generation. Captions appear above the hashtags. The first two hashtags are always `#ImmanuelChurchOfAmerica` and `#미주임마누엘교회`; the remaining three are relevant to the sermon title and/or Scripture.
 
-Each slide displays the saved title, speaker, Scripture reference, bilingual date, optional service label, and founding-year footer. Missing required fields stop generation rather than being invented. The blue-led artwork and centered, readable text follow the skill's design and inspection requirements.
+Each slide displays the title, Scripture reference, and founding-year footer. A speaker, date, and service label are included when provided or saved; missing values are omitted rather than invented. The blue-led artwork and centered, readable text follow the skill's design and inspection requirements.
 
 For a quick render directly from the local sermon store:
 
@@ -70,23 +70,20 @@ npm run instagram -- "http://localhost:8100/sermons/<sermon-id>" "https://immanu
 
 URL arguments identify sermons in `data/sermons.json` (or `ICA_DATA_DIR`, overridden by `--data-dir`). **They do not fetch live pages**; the assistant checks supplied pages before using that snapshot. Quick renders use `#Sermon #BibleTeaching #Scripture` as the additional tags.
 
-For verified metadata from a page not in the local store, or custom per-sermon tags, use `npm run instagram -- --input "/path/to/metadata.json"` with a JSON array:
+For verified metadata from a page not in the local store, metadata supplied directly by the user, or custom per-sermon tags, use `npm run instagram -- --input "/path/to/metadata.json"` with a JSON array. For Korean-only, link-free input, only `title`, `scripture`, and `description` are required:
 
 ```json
 [{
-  "url": "https://immanuelchurchofamerica.org/sermons/eb590a2a-e48d-4160-b335-cdff6b3352cc",
-  "title": "<exact saved title>",
-  "speakerEn": "<saved English speaker>",
-  "speakerKo": "<saved Korean speaker>",
-  "scripture": "<exact saved Scripture reference>",
-  "service": "<saved service label, if present>",
-  "date": "2026-11-08",
-  "description": "<exact saved Sermon Overview>",
+  "title": "<provided title>",
+  "scripture": "<provided Scripture reference>",
+  "description": "<provided Sermon Overview>",
+  "speakerKo": "<optional speaker>",
+  "date": "<optional saved date>",
   "hashtags": ["<relevant tag>", "<relevant tag>", "<relevant tag>"]
 }]
 ```
 
-One speaker language is sufficient; legacy `speaker` text is supported. Provide exactly three distinct discretionary hashtags; the two church tags are prepended automatically. Inputs are validated before generation, and overly dense text is rejected rather than shrunk below legible sizes. The command prints image paths, captions, and hashtags, and writes only JPGs directly in `data/instagram/` (git-ignored), with **no subfolders**. Filenames use `sermons-[saved YYYY-MM-DD date]-[service slug].jpg`, e.g. `sermons-2026-11-08-sunday-2nd-service.jpg`. The saved sermon date is required and must be valid; never substitute the generation date. The slug uses the saved English service when available, otherwise Korean, lowercased and separated by hyphens; missing service uses `unspecified-service`. Existing files are preserved, with repeat names receiving `-2`, `-3`, etc., including concurrent runs. Use `--output "/path/to/folder"` to change the output root. This is a local assistant tool, not an Express endpoint or Instagram publishing integration.
+When using a link, saved metadata is verified against the page. A user-provided title, Scripture, or overview is preserved exactly; do not infer missing sermon details or translate it. Speaker and date are optional; include the date only when provided or saved, never substitute the generation date. Service and hashtags are optional; the two church hashtags are prepended to three default tags when custom tags are omitted. Inputs are validated before generation, and overly dense text is rejected rather than shrunk below legible sizes. The command prints image paths, captions, and hashtags, and writes only JPGs directly in `data/instagram/` (git-ignored), with **no subfolders**. Filenames use `sermons-[saved YYYY-MM-DD date]-[service slug].jpg`, e.g. `sermons-2026-11-08-sunday-2nd-service.jpg`; missing date uses `undated`, and missing service uses `unspecified-service`. The slug uses the saved English service when available, otherwise Korean, lowercased and separated by hyphens. Existing files are preserved, with repeat names receiving `-2`, `-3`, etc., including concurrent runs. Use `--output "/path/to/folder"` to change the output root. This is a local assistant tool, not an Express endpoint or Instagram publishing integration.
 
 ## Local sermon transcription for Instagram drafts
 

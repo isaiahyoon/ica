@@ -41,7 +41,7 @@ async function writePost(outputRoot, stem, image) {
 export async function generatePosts(entries, outputRoot) {
   if (!Array.isArray(entries) || !entries.length) throw new TypeError('Provide at least one sermon.');
   const posts = entries.map((entry) => {
-    const link = sermonLink(entry.url);
+    const link = entry.url == null || entry.url === '' ? {} : sermonLink(entry.url);
     postDetails(entry);
     return { ...entry, ...link, stem: postFileStem(entry),
       caption: postCaption(entry.description), hashtags: postHashtags(entry.hashtags) };
@@ -87,7 +87,7 @@ export async function run(args) {
   if (options['--input']) {
     entries = JSON.parse(await fs.readFile(options['--input'], 'utf8'));
   } else {
-    if (!links.length) throw new TypeError('Usage: npm run instagram -- "<sermon URL>" [...] or --input <verified metadata.json>');
+    if (!links.length) throw new TypeError('Usage: npm run instagram -- "<sermon URL>" [...] or --input <sermon metadata.json>');
     const parsed = links.map(sermonLink);
     const sermons = JSON.parse(await fs.readFile(path.join(options['--data-dir'], 'sermons.json'), 'utf8'));
     if (!Array.isArray(sermons)) throw new TypeError('sermons.json must contain an array.');
