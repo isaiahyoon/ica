@@ -8,6 +8,7 @@ import { createApp } from '../server.js';
 import * as totp from '../lib/totp.js';
 import sharp from 'sharp';
 import { createSermonPreviewRenderer } from '../lib/sermon-preview.js';
+import { scriptureLanguageLinks } from '../lib/scripture-links.js';
 
 const PASSWORD = 'correct horse battery staple';
 
@@ -31,6 +32,52 @@ async function boot(options = {}) {
 }
 
 const FORM = (base) => ({ 'content-type': 'application/x-www-form-urlencoded', origin: base });
+
+test('pastor list is persistent and removal leaves saved sermons unchanged', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const token = await csrfToken(base, cookie);
+  const admin = async () => (await (await fetch(`${base}/admin`, { headers: { cookie } })).text());
+  assert.match(await admin(), /Pastor John Yoon · 윤태선 목사/);
+  const post = (url, body, headers = {}) => fetch(base + url, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie, ...headers },
+    body: new URLSearchParams({ _csrf: token, ...body }),
+  });
+  assert.equal((await fetch(`${base}/admin/pastors`, { method: 'POST', redirect: 'manual' })).status, 302);
+  assert.equal((await post('/admin/pastors', { en: 'Grace', ko: '은혜' }, { origin: 'https://other.example' })).status, 403);
+  assert.equal((await post('/admin/pastors', { _csrf: 'invalid', en: 'Grace', ko: '은혜' })).status, 403);
+  assert.equal((await post('/admin/pastors', { en: '', ko: '은혜' })).status, 400);
+  assert.equal((await post('/admin/pastors', { en: 'Grace <Kim>', ko: '김은혜 목사' })).status, 302);
+  assert.equal((await post('/admin/pastors', { en: 'Grace <Kim>', ko: '김은혜 목사' })).status, 409);
+  const list = JSON.parse(await fs.readFile(path.join(dataDir, 'pastors.json'), 'utf8')).entries;
+  assert.equal(list.length, 2);
+  assert.match(await admin(), /Grace &lt;Kim&gt; · 김은혜 목사/);
+  const saved = [{ id: 'existing', title: 'Saved', speakerEn: list[1].en, speakerKo: list[1].ko, createdAt: '2026-01-01', file: 'audio.mp3' }];
+  await fs.writeFile(path.join(dataDir, 'sermons.json'), JSON.stringify(saved));
+  const scripture = Array(3).fill('John 3:16, 18-20 (요한복음 3:16, 18-20); Romans 8:28 (로마서 8:28)').join('; ');
+  assert.ok(scripture.length > 100);
+  assert.equal((await post('/admin/sermons/existing/edit', { title: 'Saved', speakerEn: list[1].en, speakerKo: list[1].ko, scripture })).status, 302);
+  saved[0] = JSON.parse(await fs.readFile(path.join(dataDir, 'sermons.json'), 'utf8'))[0];
+  assert.equal(saved[0].scripture, scripture);
+  assert.equal((await post(`/admin/pastors/${list[1].id}/delete`, {})).status, 302);
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dataDir, 'sermons.json'), 'utf8')), saved);
+  assert.match(await (await fetch(`${base}/sermons/existing`, { headers: { cookie } })).text(), /Grace &lt;Kim&gt;/);
+  assert.equal((await post('/admin/pastors/john-yoon/delete', {})).status, 302);
+  assert.doesNotMatch(await admin(), /Pastor John Yoon/);
+  assert.equal((await post('/admin/pastors/john-yoon/delete', {})).status, 404);
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(dataDir, 'pastors.json'), 'utf8')).entries, []);
+});
+
+test('multiple bilingual Scripture passages link each split range without accepting conflicts', () => {
+  const links = scriptureLanguageLinks('John 3:16, 18-20 (요한복음 3:16, 18-20); Romans 8:28 (로마서 8:28)');
+  assert.equal((links.match(/<a /g) || []).length, 6);
+  assert.match(links, /\/kjv\/b\/john\/c\/3\/v\/18-20/);
+  assert.match(links, /\/krv\/b\/romans\/c\/8\/v\/28/);
+  assert.match(links, /John 3:16/);
+  assert.match(links, /Romans 8:28/);
+  assert.equal(scriptureLanguageLinks('John 3:16 (요한복음 3:17); Romans 8:28'), '');
+});
 const secrets = new Map();
 const lastSteps = new Map();
 const cookieOf = (res) => res.headers.get('set-cookie').split(';')[0];
@@ -170,6 +217,70 @@ test('admins reorder all published photos while preserving metadata, drafts, pag
   assert.equal((await saveGalleryOrder(base, cookie, token, editor.revision, editor.ids)).status, 409);
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(dataDir, 'gallery.json'))), saved);
 });
+
+for (const viewport of ['desktop', 'mobile']) {
+  test(`sermon selectors add staggered passages and select pastors on ${viewport}`, async () => {
+    const script = await fs.readFile(new URL('../public/scripts/admin.js', import.meta.url), 'utf8');
+    const counts = JSON.parse(await fs.readFile(new URL('../public/bible-verses.json', import.meta.url), 'utf8'));
+    if (viewport === 'mobile') {
+      const css = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+      assert.match(css, /\.scripture-range\s*\{[^}]*minmax\(min\(100%, 8rem\), 1fr\)/);
+    }
+    const element = (initial = {}) => ({
+      value: '', dataset: {}, events: {}, textContent: '', ...initial,
+      addEventListener(name, fn) { this.events[name] = fn; },
+      fire(name) { this.events[name]?.({ target: this }); },
+    });
+    const select = (initial = {}) => {
+      const control = element({
+        options: [], disabled: false,
+        replaceChildren() { this.options = []; this.value = ''; },
+        add(option) { this.options.push(option); if (this.options.length === 1) this.value = option.value; },
+        ...initial,
+      });
+      Object.defineProperty(control, 'selectedOptions', { get() { return this.options.filter((option) => option.value === this.value); } });
+      return control;
+    };
+    const book = select({ options: [
+      { value: '42', dataset: { en: 'John', ko: '요한복음' } },
+      { value: '44', dataset: { en: 'Romans', ko: '로마서' } },
+    ] });
+    const chapter = select(), start = select(), end = select();
+    const verses = element(), reference = element({ maxLength: 1000 }), status = element();
+    const addRange = element(), addPassage = element();
+    const fields = { '[data-book]': book, '[data-chapter]': chapter, '[data-start]': start, '[data-end]': end,
+      '[data-verses]': verses, '[name="scripture"]': reference, '[data-scripture-status]': status,
+      '[data-add-range]': addRange, '[data-add-passage]': addPassage };
+    const en = element(), ko = element();
+    const pastor = select({ form: { elements: { speakerEn: en, speakerKo: ko } },
+      options: [{ value: 'john', dataset: { en: 'Pastor John Yoon', ko: '윤태선 목사' } }] });
+    runInNewContext(script, {
+      document: {
+        querySelectorAll: (selector) => selector === '[data-scripture-entry]' ? [{ querySelector: (key) => fields[key] }]
+          : selector === '[data-pastor-select]' ? [pastor] : [],
+        addEventListener() {},
+      },
+      fetch: async () => ({ ok: true, json: async () => counts }),
+      Option: function Option(text, value) { this.text = text; this.value = value; },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    pastor.value = 'john'; pastor.fire('change');
+    assert.equal(en.value, 'Pastor John Yoon'); assert.equal(ko.value, '윤태선 목사');
+    en.value = 'Edited'; en.fire('input'); assert.equal(pastor.value, '');
+    book.value = '42'; book.fire('change');
+    chapter.value = '3'; chapter.fire('change');
+    start.value = '16'; start.fire('change'); end.value = '18'; addRange.fire('click');
+    start.value = '21'; start.fire('change'); addRange.fire('click');
+    assert.equal(verses.value, '16-18, 21');
+    addPassage.fire('click');
+    assert.equal(reference.value, 'John 3:16-18, 21 (요한복음 3:16-18, 21)');
+    book.value = '44'; book.fire('change'); chapter.value = '8'; chapter.fire('change');
+    verses.value = '99'; addPassage.fire('click');
+    assert.match(status.textContent, /valid verses/);
+    verses.value = '28'; addPassage.fire('click');
+    assert.equal(reference.value, 'John 3:16-18, 21 (요한복음 3:16-18, 21); Romans 8:28 (로마서 8:28)');
+  });
+}
 
 test('gallery ordering detects concurrent changes and new batches prepend without losing the saved order', async (t) => {
   const { base, close, dataDir } = await boot();

@@ -242,6 +242,7 @@ test('artwork typography separates languages and uses measured, non-overlapping 
   const c = { paper: '#fbfdfe', sky: '#bed8ea', 'brass-soft': '#dfc681' };
   for (const title of [sermon.title,
     'A Gospel Without Shame, Mercy on the Day of Judgment\n부끄러움없는 복음, 심판날의 긍휼',
+    'The Wall of Wilderness That Follows Obedience, and the Honest Cry Offered Before It\n순종 뒤에 찾아오는 광야의 벽, 그 앞에서 드리는 정직한 부르짖음',
     'Hope\n소망']) {
     const layers = await instagramArtworkTextLayers({ ...sermon, title }, c);
     for (let index = 0; index < layers.length; index += 1) {
