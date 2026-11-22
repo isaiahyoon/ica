@@ -790,7 +790,9 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(aboutHtml, /<h1>.*About.*소개.*<\/h1>/s);
   for (const detail of [
     'We are a family church.', 'Our preaching is biblically sound.',
+    'This church expounds Scripture verse by verse in its original-language context, proclaiming the Word of God.', '본 교회는 원어 중심으로 성경을 한 구절씩 차례대로 강해하여 하나님의 말씀을 선포합니다.',
     'late 19th and 20th centuries', 'We affirm the Apostles’ Creed and the Lord’s Prayer.',
+    'We observe the Lord’s Supper.', '본 교회는 주의 성찬을 거행합니다.',
     'John Yoon', '(윤태선)', 'href="tel:+13237319191"',
     'Joshua Won', '(원 여호수아)', 'href="tel:+12132105582"',
     'Kyu Ho Yeo', '(여규호)', 'href="tel:+12135037883"',
