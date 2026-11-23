@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { runInNewContext } from 'node:vm';
+import { createContext, runInContext, runInNewContext } from 'node:vm';
 import { createApp } from '../server.js';
 import * as totp from '../lib/totp.js';
 import sharp from 'sharp';
@@ -612,6 +612,8 @@ test('article likes and comments require verification and admin moderation', asy
   const token = page.match(/name="_reader" value="([^"]+)"/)[1];
   assert.ok(page.indexOf('class="column-footer"') < page.indexOf('id="article-engagement"'));
   assert.match(page, /class="column-response-link" href="#article-comments"/);
+  assert.ok(page.indexOf('/scripts/column-scroll.js') < page.indexOf('/scripts/column-comment.js'));
+  assert.match(page, /<h2><span class="bilingual"><span lang="en">Comments <span class="column-comment-count">0<\/span><\/span><span lang="ko">댓글<\/span><\/span><\/h2>/);
   assert.match(page, /class="column-toast" data-column-toast role="status" aria-live="polite"/);
   assert.match(page, /class="toast-bear"[^>]*aria-hidden="true"/);
   assert.match(page, /<span data-toast-message>/);
@@ -631,7 +633,7 @@ test('article likes and comments require verification and admin moderation', asy
   assert.match((await post('/columns/rest/like', { like_action: 'like' })).headers.get('location'), /status=liked/);
   assert.equal((await post('/columns/rest/like', { like_action: 'like' })).status, 302);
   let html = await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text();
-  assert.match(html, /name="like_action" value="unlike"[\s\S]*aria-pressed="true"[\s\S]*Liked[\s\S]*좋아요 수: 1">1/);
+  assert.match(html, /name="like_action" value="unlike"[\s\S]*aria-pressed="true"[\s\S]*>Like<\/span>[\s\S]*좋아요 수: 1">1/);
   const secondResponse = await fetch(`${base}/articles/rest?lang=en`);
   const secondReader = secondResponse.headers.get('set-cookie').split(';')[0];
   const secondToken = (await secondResponse.text()).match(/name="_reader" value="([^"]+)"/)[1];
@@ -764,6 +766,7 @@ test('article storage failures return an error response', async (t) => {
 for (const viewport of ['desktop', 'mobile']) {
   test(`liking and unliking an article keeps the ${viewport} page in place`, async () => {
     const source = await fs.readFile(new URL('../public/scripts/column-comment.js', import.meta.url), 'utf8');
+    const scrollSource = await fs.readFile(new URL('../public/scripts/column-scroll.js', import.meta.url), 'utf8');
     let toastResets = 0;
     const status = {
       textContent: '',
@@ -793,18 +796,23 @@ for (const viewport of ['desktop', 'mobile']) {
       querySelector: (selector) => selector === '[name="like_action"]' ? action : button,
       addEventListener: (_name, handler) => { submit = handler; },
     };
-    const window = { location: { origin: 'https://example.com', href: 'https://example.com/articles/rest?lang=en#article-body' } };
+    const window = {
+      location: { origin: 'https://example.com', href: 'https://example.com/articles/rest?lang=en#article-body' },
+      scrollY: viewport === 'desktop' ? 640 : 420,
+      matchMedia: () => ({ matches: false }),
+      addEventListener() {},
+    };
     let request;
     let requests = 0;
     let pending;
     let timerId = 0;
     const timers = new Map();
     let result = { liked: true, likes: 7 };
-    runInNewContext(source, {
+    const context = createContext({
       document: { querySelector: (selector) => selector === '[data-toast-message]' ? status : selector === '.column-comment-form' ? {
         querySelector: () => ({ textContent: '', disabled: false }),
         addEventListener() {},
-      } : form },
+      } : selector === '.column-scroll-top' ? { addEventListener() {} } : form },
       window, URL, URLSearchParams,
       setTimeout: (callback, delay) => { const id = ++timerId; timers.set(id, { callback, delay }); return id; },
       clearTimeout: (id) => timers.delete(id),
@@ -816,21 +824,24 @@ for (const viewport of ['desktop', 'mobile']) {
         return { ok: true, json: async () => result };
       },
     });
+    runInContext(scrollSource, context);
+    runInContext(source, context);
     let prevented = false;
     await submit({ preventDefault() { prevented = true; } });
     assert.equal(prevented, true);
     assert.equal(request.method, 'POST');
     assert.equal(request.credentials, 'same-origin');
     assert.equal(window.location.href, 'https://example.com/articles/rest?lang=en#article-body');
+    assert.equal(window.scrollY, viewport === 'desktop' ? 640 : 420);
     assert.equal(request.body.get('like_action'), 'like');
     assert.equal(button.disabled, false);
     assert.equal(button['aria-pressed'], 'true');
-    assert.deepEqual(label.children.map((child) => child.textContent), ['Liked', '좋아요 완료']);
+    assert.deepEqual(label.children.map((child) => child.textContent), ['Like', '좋아요']);
     assert.equal(count.textContent, '7');
     assert.equal(count['aria-label'], 'Likes · 좋아요 수: 7');
     assert.match(status.textContent, /^Article liked\./);
     assert.doesNotMatch(status.textContent, /Thank you/);
-    assert.equal([...timers.values()][0].delay, 3100);
+    assert.equal([...timers.values()][0].delay, 4100);
     assert.ok(classes.has('like-pop'));
     result = { liked: false, likes: 6 };
     await submit({ preventDefault() {} });
@@ -846,7 +857,7 @@ for (const viewport of ['desktop', 'mobile']) {
     await submit({ preventDefault() {} });
     assert.match(status.textContent, /reload the page/i);
     assert.equal(timers.size, 1);
-    assert.equal([...timers.values()][0].delay, 3100);
+    assert.equal([...timers.values()][0].delay, 4100);
     assert.equal(button.disabled, false);
     assert.equal(count.textContent, '6');
     let release;
@@ -905,11 +916,18 @@ for (const viewport of ['desktop', 'mobile']) {
   });
 }
 
-test('toast fade timing and reduced motion preserve the 3.1-second lifetime', async () => {
+test('toast fade timing and reduced motion preserve the 4.1-second lifetime', async () => {
   const styles = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
-  assert.match(styles, /\.column-toast:has\(\[data-toast-message\]:not\(:empty\)\) \{ animation: toast-fade 2\.1s linear 1s forwards; \}/);
+  assert.match(styles, /\.column-toast:has\(\[data-toast-message\]:not\(:empty\)\) \{ animation: toast-fade 2\.1s linear 2s forwards; \}/);
   assert.match(styles, /@keyframes toast-fade \{ from \{ opacity: 1; \} to \{ opacity: 0; \} \}/);
-  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{\s*\.column-toast:has\(\[data-toast-message\]:not\(:empty\)\) \{ animation: toast-fade 3\.1s steps\(1, end\) forwards !important; \}/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{\s*\.column-toast:has\(\[data-toast-message\]:not\(:empty\)\) \{ animation: toast-fade 4\.1s steps\(1, end\) forwards !important; \}/);
+});
+
+test('article reactions and comment fields use soft styling with a visible focus treatment', async () => {
+  const styles = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  assert.match(styles, /\.column-like\[aria-pressed="true"\] svg \{ fill: var\(--pink\); \}/);
+  assert.match(styles, /\.column-comment-form input:not\(\[type="hidden"\]\), \.column-comment-form textarea \{[^}]*border-image: none; border-radius: \.8rem;/);
+  assert.match(styles, /\.column-comment-form input:not\(\[type="hidden"\]\):focus, \.column-comment-form textarea:focus \{[^}]*outline: 3px solid var\(--focus\);/);
 });
 const secrets = new Map();
 const lastSteps = new Map();

@@ -1,5 +1,5 @@
 const form = document.querySelector('.column-comment-form');
-const button = form.querySelector('button[type="submit"]');
+const commentButton = form.querySelector('button[type="submit"]');
 const likeForm = document.querySelector('.column-like-form');
 const likeButton = likeForm.querySelector('button[type="submit"]');
 const likeAction = likeForm.querySelector('[name="like_action"]');
@@ -12,11 +12,11 @@ function showToast(message) {
   toast.textContent = '';
   void toast.offsetWidth;
   toast.textContent = message;
-  toastTimer = setTimeout(() => { toast.textContent = ''; }, 3100);
+  toastTimer = setTimeout(() => { toast.textContent = ''; }, 4100);
 }
 
 if (toast.textContent.trim()) {
-  toastTimer = setTimeout(() => { toast.textContent = ''; }, 3100);
+  toastTimer = setTimeout(() => { toast.textContent = ''; }, 4100);
 }
 
 likeForm.addEventListener('submit', async (event) => {
@@ -40,9 +40,6 @@ likeForm.addEventListener('submit', async (event) => {
     if (typeof result.liked !== 'boolean' || !Number.isSafeInteger(result.likes) || result.likes < 0) {
       throw new Error('Could not save your like. Please reload the page. · 좋아요를 확인할 수 없습니다. 페이지를 새로고침해 주세요.');
     }
-    const label = likeButton.querySelector('.bilingual');
-    label.children[0].textContent = result.liked ? 'Liked' : 'Like';
-    label.children[1].textContent = result.liked ? '좋아요 완료' : '좋아요';
     likeButton.setAttribute('aria-pressed', String(result.liked));
     likeAction.value = result.liked ? 'unlike' : 'like';
     const count = likeButton.querySelector('[data-like-count]');
@@ -65,7 +62,7 @@ likeForm.addEventListener('submit', async (event) => {
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  button.disabled = true;
+  commentButton.disabled = true;
   try {
     const response = await fetch(form.action, {
       method: 'POST',
@@ -86,6 +83,6 @@ form.addEventListener('submit', async (event) => {
       ? 'Could not submit the comment. Please check your connection and try again. · 댓글을 보낼 수 없습니다. 연결을 확인한 후 다시 시도해 주세요.'
       : error.message || 'Could not submit the comment. Please try again. · 댓글을 보낼 수 없습니다. 다시 시도해 주세요.');
   } finally {
-    button.disabled = false;
+    commentButton.disabled = false;
   }
 });
