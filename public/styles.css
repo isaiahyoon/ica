@@ -478,6 +478,7 @@ main:has(> .gallery-viewer) .page-num, main:has(> .gallery-viewer) .page-step { 
 }
 .sermon-edit { margin: .5rem 0; font-family: var(--sans); }
 .sermon-edit summary { cursor: pointer; color: var(--navy); }
+.sermon-edit textarea[name="description"] { height: 46.875rem; }
 .sermon-head { padding-bottom: .75rem; margin-bottom: .9rem; border-bottom: 1px solid rgba(169, 124, 53, .35); }
 .sermon h3 { margin: 0 0 .3em; font-size: 1.5rem; line-height: 1.2; color: var(--navy); }
 .sermon h3 a { color: inherit; font: inherit; text-decoration: none; }
@@ -656,7 +657,7 @@ input:focus, textarea:focus, select:focus { outline: 3px solid rgba(63,127,166,.
 .admin-grid .form label .bilingual { gap: .12em; line-height: 1.2; }
 .admin-grid .form label small { font-size: .82rem; line-height: 1.45; }
 .admin-grid .form input:not([type="file"]), .admin-grid .form textarea, .admin-grid .form select { min-height: 2.9rem; }
-.admin-grid .form textarea[name="description"] { min-height: 6rem; }
+.admin-grid .form textarea[name="description"] { min-height: 6rem; height: 54rem; }
 .admin-grid .form input[type="file"] { min-width: 0; padding: .55rem .65rem; background: var(--paper); }
 .admin-grid .count { margin-top: 1.1rem; padding-top: .8rem; border-top: 1px solid var(--line); }
 .count { margin: 1rem 0 0; color: var(--muted); font-size: .9rem; }

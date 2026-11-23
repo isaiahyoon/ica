@@ -2109,7 +2109,7 @@ test('sermon overviews accept up to 10000 characters on upload and edit', async 
   const csrf = await csrfToken(base, cookie);
   const overview = '설'.repeat(10000);
   const admin = await (await fetch(`${base}/admin/sermons`, { headers: { cookie } })).text();
-  assert.match(admin, /<textarea name="description" rows="3" maxlength="10000"/);
+  assert.match(admin, /<textarea name="description" rows="27" maxlength="10000"/);
 
   const upload = new FormData();
   for (const [name, value] of Object.entries({
@@ -2136,7 +2136,10 @@ test('sermon overviews accept up to 10000 characters on upload and edit', async 
   const [updated] = JSON.parse(await fs.readFile(path.join(dataDir, 'sermons.json'), 'utf8'));
   assert.equal(updated.description, overview);
   const sermonPage = await (await fetch(`${base}/sermons/${created.id}`, { headers: { cookie } })).text();
-  assert.match(sermonPage, /<textarea name="description" rows="3" maxlength="10000"/);
+  assert.match(sermonPage, /<textarea name="description" rows="27" maxlength="10000"/);
+  const styles = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  assert.match(styles, /\.admin-grid \.form textarea\[name="description"\]\s*\{[^}]*height:\s*54rem/);
+  assert.match(styles, /\.sermon-edit textarea\[name="description"\]\s*\{[^}]*height:\s*46\.875rem/);
 });
 
 test('admin sessions use hardened cookies, require CSRF tokens, and revoke on logout', async (t) => {
