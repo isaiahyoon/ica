@@ -248,7 +248,7 @@ export function createApp({
   });
 
   mountGallery({ app, store, uploadDir, page, renderPage });
-  mountColumns({ app, store, uploadDir, page, renderPage });
+  mountColumns({ app, store, uploadDir, page, renderPage, readPastors });
 
   // Wrap multer so upload errors (size, type) render a friendly message.
   const handleUpload = (mw) => (req, res, next) =>

@@ -95,7 +95,7 @@ test('pastors publish bilingual columns with escaped text, an image, video, and 
   body.set('titleKo', '아보트 공부');
   body.set('excerptEn', 'A short <preview>');
   body.set('excerptKo', '짧은 미리보기');
-  body.set('bodyEn', 'English paragraph one.\n\nEnglish paragraph two.');
+  body.set('bodyEn', 'English & <Korean>\nsecond line.\r\n\r\nEnglish paragraph two.');
   body.set('bodyKo', '첫 번째 한국어 문단입니다.\n\n두 번째 한국어 문단입니다.');
   body.set('videoUrl', 'https://www.youtube.com/watch?v=example');
   body.set('date', '2026-11-22');
@@ -110,23 +110,58 @@ test('pastors publish bilingual columns with escaped text, an image, video, and 
   assert.equal(published.status, 302);
   assert.equal(published.headers.get('location'), '/columns');
 
+  const textOnly = new FormData();
+  textOnly.set('_csrf', token);
+  textOnly.set('titleEn', 'A text-only article');
+  textOnly.set('excerptEn', 'A preview without an image.');
+  assert.equal((await fetch(`${base}/admin/columns`, {
+    method: 'POST', redirect: 'manual', headers: { cookie, origin: base }, body: textOnly,
+  })).status, 302);
+
   const list = await (await fetch(`${base}/columns`)).text();
   assert.match(list, /Lorem &lt;Ipsum&gt;/);
   assert.match(list, /아보트 공부/);
   assert.match(list, /A short &lt;preview&gt;/);
   assert.match(list, /columns\/lorem-ipsum/);
+  const cards = [...list.matchAll(/<article class="column-card"[\s\S]*?<\/article>/g)].map((match) => match[0]);
+  assert.equal(cards.length, 2);
+  const imageCard = cards.find((card) => card.includes('/columns/lorem-ipsum'));
+  const textCard = cards.find((card) => card.includes('/columns/a-text-only-article'));
+  for (const card of [imageCard, textCard]) {
+    assert.ok(card);
+    assert.equal((card.match(/<a /g) || []).length, 1);
+    assert.match(card, /<a class="column-card-link(?: has-image)?" href="\/columns\/[^"]+" aria-labelledby="[^"]+">[\s\S]*<h2[^>]*>[\s\S]*<\/h2>[\s\S]*<\/a>/);
+    assert.doesNotMatch(card, /<button|Read article|기사 읽기/);
+  }
+  assert.match(imageCard, /class="column-card-link has-image"[\s\S]*<img[^>]+alt=""/);
+  assert.match(imageCard, /aria-labelledby="column-title-[^"]+ column-title-ko-[^"]+"/);
+  assert.match(textCard, /class="column-card-link"[\s\S]*A preview without an image\.[\s\S]*<\/a>/);
+  assert.doesNotMatch(textCard, /class="column-card-image"/);
 
   const article = await (await fetch(`${base}/columns/lorem-ipsum`)).text();
   assert.match(article, /Lorem &lt;Ipsum&gt;/);
-  assert.match(article, /English paragraph one/);
+  assert.match(article, /<p>English &amp; &lt;Korean&gt;<br>second line\.<\/p><p>English paragraph two\.<\/p>/);
+  assert.doesNotMatch(article, /&amp;amp;|&amp;lt;Korean/);
   assert.match(article, /첫 번째 한국어 문단입니다/);
   assert.doesNotMatch(article, /Lorem <Ipsum>/);
   assert.match(article, /href="https:\/\/www\.youtube\.com\/watch\?v=example"/);
+  assert.match(article, /class="column-back" href="\/columns"/);
+  assert.match(article, /<h1>Lorem &lt;Ipsum&gt;<\/h1>/);
+  assert.match(article, /<time datetime="2026-11-22">/);
+  assert.match(article, /class="column-feature"[\s\S]*<img[^>]*alt="Lorem &lt;Ipsum&gt;"/);
+  assert.match(article, /class="column-video-link" href="https:\/\/www\.youtube\.com\/watch\?v=example" target="_blank" rel="noopener noreferrer"/);
+  const textArticle = await (await fetch(`${base}/columns/a-text-only-article`)).text();
+  assert.doesNotMatch(textArticle, /class="column-feature"|class="column-video-link"|<time /);
 
   const source = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
-  assert.match(source, /\.column-card \{/);
+  assert.match(source, /\.column-card::before/);
+  assert.match(source, /\.column-card-link:focus-visible\s*\{[^}]*outline:/);
+  assert.match(source, /\.column-card-link\.has-image\s*\{[^}]*grid-template-columns:\s*minmax\(180px, 35%\) minmax\(0, 1fr\)/);
   assert.match(source, /@media \(max-width: 560px\)/);
-  assert.match(source, /\.column-card \{ grid-template-columns: 1fr; \}/);
+  assert.match(source, /\.column-card-link\.has-image \{ grid-template-columns: 1fr; \}/);
+  assert.match(source, /\.columns-page \.page-head, \.column-card, \.column-article, \.column-feature, \.column-video-link,[\s\S]*?border-radius: var\(--radius\)/);
+  assert.match(source, /\.column-reading\s*\{[^}]*max-width:\s*47rem/s);
+  assert.match(source, /\.column-language p\s*\{[^}]*overflow-wrap:\s*anywhere/s);
 
   const columns = JSON.parse(await fs.readFile(path.join(dataDir, 'columns.json'), 'utf8'));
   const deleteResponse = await fetch(`${base}/admin/columns/${columns[0].id}/delete`, {
@@ -136,6 +171,176 @@ test('pastors publish bilingual columns with escaped text, an image, video, and 
     body: new URLSearchParams({ _csrf: token }),
   });
   assert.equal(deleteResponse.status, 302);
+});
+
+test('visual article editing preserves links and safely publishes inline images', async (t) => {
+  const { base, dataDir, uploadDir, close } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const token = await csrfToken(base, cookie);
+  const editor = await fetch(`${base}/admin/columns/new`, { headers: { cookie } });
+  assert.equal(editor.status, 200);
+  const editorHtml = await editor.text();
+  assert.match(editorHtml, /data-column-surface[\s\S]*data-insert-image[\s\S]*data-insert-link|data-column-surface[\s\S]*data-insert-link[\s\S]*data-insert-image/);
+  assert.match(editorHtml, /data-pastor-select[\s\S]*Pastor John Yoon[\s\S]*윤태선 목사/);
+  assert.equal((await fetch(`${base}/admin/columns/new`, { redirect: 'manual' })).status, 302);
+
+  const imageId = 'c65c7e29-b623-40cf-9c2c-6e59f214057a';
+  const image = await sharp({ create: { width: 20, height: 20, channels: 3, background: '#223b55' } }).png().toBuffer();
+  const makeForm = (overrides = {}) => {
+    const data = new FormData();
+    const values = {
+      _csrf: token, titleEn: 'An article', titleKo: '기사', excerptEn: '', excerptKo: '',
+      speakerEn: 'Pastor John Yoon', speakerKo: '윤태선 목사',
+      bodyEnDoc: JSON.stringify([{ type: 'block', children: [
+        { type: 'text', text: 'Before & <after> ' },
+        { type: 'link', href: 'https://example.com/watch?a=1&b=2', children: [{ type: 'text', text: 'Watch' }] },
+        { type: 'image', file: `new:${imageId}`, alt: 'A church photo' },
+        { type: 'text', text: ' Then more text.' },
+      ] }]),
+      bodyKoDoc: JSON.stringify([{ type: 'block', children: [{ type: 'text', text: '한국어 기사' }] }]),
+      date: '2026-11-22', videoUrl: '', ...overrides,
+    };
+    for (const [key, value] of Object.entries(values)) data.set(key, value);
+    return data;
+  };
+  const post = (url, body, headers = {}) => fetch(base + url, {
+    method: 'POST', redirect: 'manual', headers: { cookie, origin: base, 'x-csrf-token': token, ...headers }, body,
+  });
+  const forbidden = makeForm();
+  forbidden.set('inlineImages', new Blob([image], { type: 'image/png' }), `${imageId}.png`);
+  assert.equal((await post('/admin/columns/rich', forbidden, { 'x-csrf-token': 'invalid' })).status, 403);
+  assert.equal((await post('/admin/columns/rich', makeForm(), { origin: 'https://other.example' })).status, 403);
+  const missing = await post('/admin/columns/rich', makeForm());
+  assert.equal(missing.status, 400);
+  assert.match((await missing.json()).error, /image is missing/);
+  const badLink = makeForm({ bodyEnDoc: JSON.stringify([{ type: 'link', href: 'javascript:alert(1)', children: [] }]) });
+  assert.equal((await post('/admin/columns/rich', badLink)).status, 400);
+
+  const create = makeForm();
+  create.set('inlineImages', new Blob([image], { type: 'image/png' }), `${imageId}.png`);
+  create.set('image', new Blob([image], { type: 'image/png' }), 'cover.png');
+  const created = await post('/admin/columns/rich', create);
+  assert.equal(created.status, 200);
+  const location = (await created.json()).location;
+  assert.equal(location, '/columns/an-article');
+  let saved = JSON.parse(await fs.readFile(path.join(dataDir, 'columns.json'), 'utf8'))[0];
+  assert.equal(saved.inlineImages.length, 1);
+  const inlineImage = saved.inlineImages[0];
+  const cover = saved.image;
+  const publicPage = await (await fetch(base + location)).text();
+  assert.match(publicPage, /Before &amp; &lt;after&gt; <a href="https:\/\/example\.com\/watch\?a=1&amp;b=2"/);
+  assert.match(publicPage, /<img src="\/columns\/images\/[^"]+" data-column-image="[^"]+" alt="A church photo"/);
+  assert.match(publicPage, /Then more text\./);
+  assert.equal((await fetch(`${base}/columns/images/${inlineImage}`)).status, 200);
+
+  const editPage = await (await fetch(`${base}/admin/columns/${saved.id}/edit`, { headers: { cookie } })).text();
+  const revision = editPage.match(/name="revision" value="([^"]+)"/)[1];
+  assert.match(editPage, /data-column-image="/);
+  const editedDoc = JSON.stringify([{ type: 'block', children: [
+    { type: 'text', text: 'Updated text' }, { type: 'image', file: inlineImage, alt: 'Updated photo' },
+  ] }]);
+  const edited = await post(`/admin/columns/${saved.id}/edit`, makeForm({ revision, titleEn: 'Renamed article', bodyEnDoc: editedDoc }));
+  assert.equal(edited.status, 200);
+  assert.equal((await edited.json()).location, location);
+  const stale = await post(`/admin/columns/${saved.id}/edit`, makeForm({ revision, bodyEnDoc: editedDoc }));
+  assert.equal(stale.status, 409);
+  saved = JSON.parse(await fs.readFile(path.join(dataDir, 'columns.json'), 'utf8'))[0];
+  assert.equal(saved.titleEn, 'Renamed article');
+  assert.equal(saved.speakerKo, '윤태선 목사');
+  assert.equal(saved.image, cover);
+  assert.deepEqual(saved.inlineImages, [inlineImage]);
+  assert.match(await (await fetch(base + location)).text(), /Updated text/);
+  assert.equal((await fetch(`${base}/columns/images/${cover}`)).status, 200);
+
+  const removed = await fetch(`${base}/admin/columns/${saved.id}/delete`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie }, body: new URLSearchParams({ _csrf: token }),
+  });
+  assert.equal(removed.status, 302);
+  assert.equal((await fetch(`${base}/columns/images/${inlineImage}`)).status, 404);
+  assert.deepEqual(await fs.readdir(path.join(uploadDir, 'columns')), []);
+});
+
+test('article language links and previews follow the shared language and author', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  await fs.mkdir(dataDir, { recursive: true });
+  const column = {
+    id: 'article1', slug: 'rest', titleEn: 'A place of rest', titleKo: '쉼의 자리',
+    bodyEn: 'English body', bodyKo: '한국어 본문', speakerEn: 'Pastor John Yoon',
+    speakerKo: '윤태선 목사', date: '2026-11-22', createdAt: '2026-11-22T00:00:00Z',
+  };
+  await fs.writeFile(path.join(dataDir, 'columns.json'), JSON.stringify([column]));
+  const en = await (await fetch(`${base}/columns/rest?lang=en`)).text();
+  const ko = await (await fetch(`${base}/columns/rest?lang=ko`)).text();
+  assert.match(en, /<h1>A place of rest<\/h1>/);
+  assert.match(en, /English body/);
+  assert.doesNotMatch(en, /한국어 본문/);
+  assert.match(ko, /<h1 lang="ko">쉼의 자리<\/h1>/);
+  assert.match(ko, /한국어 본문/);
+  assert.doesNotMatch(ko, /English body/);
+  assert.match(ko, /윤태선 목사/);
+  assert.match(ko, /property="og:url" content="https:\/\/immanuelchurchofamerica.org\/columns\/rest\?lang=ko"/);
+  assert.match(ko, /property="og:image" content="[^"]+\/columns\/rest\/preview\.png\?lang=ko&amp;v=[a-f0-9]+"/);
+  assert.match(ko, /property="og:image:alt" content="쉼의 자리 · 윤태선 목사 · /);
+  assert.match(ko, /href="\?lang=en"/);
+  const fallback = await (await fetch(`${base}/columns/rest`)).text();
+  assert.match(fallback, /English body/);
+  assert.match(fallback, /한국어 본문/);
+  const preview = await fetch(`${base}/columns/rest/preview.png?lang=ko`);
+  assert.equal(preview.status, 200);
+  assert.deepEqual({ width: (await sharp(Buffer.from(await preview.arrayBuffer())).metadata()).width, type: preview.headers.get('content-type') },
+    { width: 1200, type: 'image/png' });
+  const oldEtag = preview.headers.get('etag');
+  column.speakerKo = '다른 목사';
+  await fs.writeFile(path.join(dataDir, 'columns.json'), JSON.stringify([column]));
+  const changed = await fetch(`${base}/columns/rest/preview.png?lang=ko`);
+  assert.notEqual(changed.headers.get('etag'), oldEtag);
+  assert.equal((await fetch(`${base}/columns/missing/preview.png`)).status, 404);
+});
+
+test('article likes and comments require verification and admin moderation', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'columns.json'), JSON.stringify([{
+    id: 'article1', slug: 'rest', titleEn: 'Rest', bodyEn: 'Text', createdAt: '2026-11-22',
+  }]));
+  const response = await fetch(`${base}/columns/rest?lang=en`);
+  const reader = response.headers.get('set-cookie').split(';')[0];
+  const page = await response.text();
+  const token = page.match(/name="_reader" value="([^"]+)"/)[1];
+  const post = (url, values, headers = {}) => fetch(base + url, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie: reader, ...headers },
+    body: new URLSearchParams({ _reader: token, lang: 'en', ...values }),
+  });
+  assert.equal((await post('/columns/rest/like', {}, { origin: 'https://other.example' })).status, 403);
+  assert.equal((await post('/columns/rest/like', { _reader: 'bad' })).status, 403);
+  assert.equal((await post('/columns/rest/like', {})).status, 302);
+  assert.equal((await post('/columns/rest/like', {})).status, 302);
+  let html = await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text();
+  assert.match(html, /disabled>[\s\S]*Liked[\s\S]*좋아요 수">1/);
+  assert.equal((await post('/columns/rest/comments', { name: 'Reader', email: 'bad', comment: 'Hello' })).status, 400);
+  assert.equal((await post('/columns/rest/comments', { name: '<Reader>', email: 'private@example.com', comment: '<script>hello</script>' })).status, 302);
+  html = await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text();
+  assert.doesNotMatch(html, /private@example\.com|&lt;script&gt;hello/);
+  const adminCookie = await login(base);
+  const adminToken = await csrfToken(base, adminCookie);
+  assert.equal((await fetch(`${base}/admin/columns/comments`, { redirect: 'manual' })).status, 302);
+  const moderation = await (await fetch(`${base}/admin/columns/comments`, { headers: { cookie: adminCookie } })).text();
+  assert.match(moderation, /private@example\.com/);
+  assert.match(moderation, /&lt;script&gt;hello&lt;\/script&gt;/);
+  const action = moderation.match(/action="([^"]+\/approve)"/)[1];
+  const approve = (csrf, origin = base) => fetch(base + action, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), origin, cookie: adminCookie }, body: new URLSearchParams({ _csrf: csrf }),
+  });
+  assert.equal((await approve('bad')).status, 403);
+  assert.equal((await approve(adminToken, 'https://other.example')).status, 403);
+  assert.equal((await approve(adminToken)).status, 302);
+  html = await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text();
+  assert.match(html, /&lt;Reader&gt;/);
+  assert.match(html, /&lt;script&gt;hello&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /private@example\.com|<script>hello/);
 });
 const secrets = new Map();
 const lastSteps = new Map();
