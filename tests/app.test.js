@@ -474,7 +474,11 @@ test('article likes and comments require verification and admin moderation', asy
   assert.ok(page.indexOf('class="column-footer"') < page.indexOf('id="article-engagement"'));
   assert.match(page, /class="column-response-link" href="#article-comments"/);
   assert.match(page, /class="column-toast" data-column-toast role="status" aria-live="polite"/);
+  assert.match(page, /class="toast-bear"[^>]*aria-hidden="true"/);
+  assert.match(page, /<span data-toast-message>/);
   assert.doesNotMatch(page, /data-like-status|data-comment-status/);
+  const noScriptFeedback = await (await fetch(`${base}/articles/rest?lang=en&status=submitted`, { headers: { cookie: reader } })).text();
+  assert.match(noScriptFeedback, /class="column-toast"[^>]*>[\s\S]*Comment submitted for review/);
   assert.match(page, /<details class="column-response">[\s\S]*name="name"[\s\S]*name="email"[\s\S]*name="comment"/);
   assert.ok(page.indexOf('class="column-reactions"') < page.indexOf('class="column-response"'));
   assert.ok(page.indexOf('class="column-response"') < page.indexOf('No comments yet.'));
@@ -624,13 +628,17 @@ for (const viewport of ['desktop', 'mobile']) {
     let request;
     let requests = 0;
     let pending;
+    let timerId = 0;
+    const timers = new Map();
     let result = { liked: true, likes: 7 };
     runInNewContext(source, {
-      document: { querySelector: (selector) => selector === '[data-column-toast]' ? status : selector === '.column-comment-form' ? {
+      document: { querySelector: (selector) => selector === '[data-toast-message]' ? status : selector === '.column-comment-form' ? {
         querySelector: () => ({ textContent: '', disabled: false }),
         addEventListener() {},
       } : form },
-      window, URL, URLSearchParams, setTimeout: () => 1, clearTimeout() {},
+      window, URL, URLSearchParams,
+      setTimeout: (callback, delay) => { const id = ++timerId; timers.set(id, { callback, delay }); return id; },
+      clearTimeout: (id) => timers.delete(id),
       FormData: class { *[Symbol.iterator]() { yield ['_reader', 'token']; yield ['like_action', action.value]; } },
       fetch: async (_url, options) => {
         request = options;
@@ -653,6 +661,7 @@ for (const viewport of ['desktop', 'mobile']) {
     assert.equal(count['aria-label'], 'Likes · 좋아요 수: 7');
     assert.match(status.textContent, /^Article liked\./);
     assert.doesNotMatch(status.textContent, /Thank you/);
+    assert.equal([...timers.values()][0].delay, 5000);
     assert.ok(classes.has('like-pop'));
     result = { liked: false, likes: 6 };
     await submit({ preventDefault() {} });
@@ -666,6 +675,8 @@ for (const viewport of ['desktop', 'mobile']) {
     result = { liked: 'bad', likes: -1 };
     await submit({ preventDefault() {} });
     assert.match(status.textContent, /reload the page/i);
+    assert.equal(timers.size, 1);
+    assert.equal([...timers.values()][0].delay, 8000);
     assert.equal(button.disabled, false);
     assert.equal(count.textContent, '6');
     let release;
@@ -680,6 +691,9 @@ for (const viewport of ['desktop', 'mobile']) {
     await first;
     assert.equal(button['aria-busy'], undefined);
     assert.equal(button['aria-pressed'], 'true');
+    assert.equal(timers.size, 1);
+    [...timers.values()][0].callback();
+    assert.equal(status.textContent, '');
   });
 
   test(`comment submission keeps the ${viewport} page in place and preserves input on failure`, async () => {
@@ -697,7 +711,7 @@ for (const viewport of ['desktop', 'mobile']) {
     };
     const window = { location: { origin: 'https://example.com', href: 'https://example.com/articles/rest?lang=en' } };
     runInNewContext(source, {
-      document: { querySelector: (selector) => selector === '[data-column-toast]' ? status : form },
+      document: { querySelector: (selector) => selector === '[data-toast-message]' ? status : form },
       window, URL, URLSearchParams, setTimeout: () => 1, clearTimeout() {},
       FormData: class { *[Symbol.iterator]() { yield ['comment', 'Hello']; } },
       fetch: async () => response,
@@ -1867,6 +1881,7 @@ test('sermons can be shared with the native share sheet or copied as a link', as
   assert.match(html, /class="btn btn-ghost sermon-action copy-link" href="\/sermons\/share-id"/);
   assert.match(html, /class="btn btn-ghost sermon-action share-link"[\s\S]*Share sermon[\s\S]*설교 공유/);
   assert.match(html, /class="btn btn-ghost sermon-action copy-link"[\s\S]*Copy link[\s\S]*링크 복사/);
+  assert.match(html, /class="copy-check" aria-hidden="true">✓<\/span><span class="copy-feedback" role="status" aria-live="polite"/);
   const styles = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
   assert.match(styles, /\.sermon-actions \.sermon-action \{ border-radius: 999px; \}/);
   assert.match(styles, /\.sermon-actions \.sermon-action::before \{ border-radius: calc\(999px - var\(--rim\)\); \}/);

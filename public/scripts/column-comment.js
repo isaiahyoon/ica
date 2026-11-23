@@ -3,7 +3,7 @@ const button = form.querySelector('button[type="submit"]');
 const likeForm = document.querySelector('.column-like-form');
 const likeButton = likeForm.querySelector('button[type="submit"]');
 const likeAction = likeForm.querySelector('[name="like_action"]');
-const toast = document.querySelector('[data-column-toast]');
+const toast = document.querySelector('[data-toast-message]');
 let toastTimer;
 let likePending = false;
 
