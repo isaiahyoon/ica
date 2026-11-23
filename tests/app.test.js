@@ -1432,6 +1432,22 @@ test('contact visit panel includes an accessible location diagram with south-sid
   assert.match(css, /@media \(max-width: 680px\)\s*\{[\s\S]*?\.contact-scripture\s*\{[^}]*flex-direction:\s*column;[^}]*text-align:\s*center/s);
 });
 
+test('public gallery and contact use rounded surfaces without changing About or gallery admin', async (t) => {
+  const { base, close } = await boot();
+  t.after(close);
+  const gallery = await (await fetch(`${base}/gallery`)).text();
+  const contact = await (await fetch(`${base}/contact`)).text();
+  const about = await (await fetch(`${base}/about`)).text();
+  assert.match(gallery, /<dialog class="gallery-viewer"/);
+  assert.match(contact, /<div class="contact-page">/);
+  assert.match(about, /<div class="contact-page about-page">/);
+  const css = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  assert.match(css, /\.contact-page:not\(\.about-page\) \.visit-panel[\s\S]*?border-radius: var\(--radius\)/);
+  assert.match(css, /main:has\(> \.gallery-viewer\) \.gallery-photo[\s\S]*?border-radius: var\(--radius\)/);
+  assert.match(css, /main:has\(> \.gallery-viewer\) \.gallery-photo::before[\s\S]*?border-radius: calc\(var\(--radius\) - var\(--rim\)\)/);
+  assert.match(css, /main:has\(> \.gallery-viewer\) \.gallery-viewer img\s*\{[^}]*border-radius:/s);
+});
+
 test('configured storage paths serve persistent sermon data and uploads', async (t) => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'ica-storage-'));
   const dataDir = path.join(tmp, 'data');

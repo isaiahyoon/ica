@@ -339,6 +339,14 @@ nav a:focus-visible { box-shadow: inset 0 0 0 2px var(--brass-soft); }
 .about-page .people li > a { max-width: 100%; text-align: right; }
 .about-page h3 { margin: 1.25rem 0 .25rem; }
 .contact-page > .contact-scripture { margin-top: clamp(1.5rem, 3vw, 2.25rem); }
+.contact-page:not(.about-page) .page-head, .contact-page:not(.about-page) .visit-panel,
+.contact-page:not(.about-page) .visit-map, .contact-page:not(.about-page) .cornerstone,
+.contact-page:not(.about-page) .btn { border-radius: var(--radius); }
+.contact-page:not(.about-page) .page-head::before, .contact-page:not(.about-page) .visit-panel::before,
+.contact-page:not(.about-page) .visit-map::before, .contact-page:not(.about-page) .cornerstone::before,
+.contact-page:not(.about-page) .btn::before { border-radius: calc(var(--radius) - var(--rim)); }
+.contact-page:not(.about-page) .contact-section, .contact-page:not(.about-page) .logo-glimmer,
+.contact-page:not(.about-page) .contact-scripture img { border-radius: calc(var(--radius) - 4px); }
 @media (max-width: 680px) {
   .contact-grid { grid-template-columns: 1fr; }
   .contact-grid > .panel:last-child, .about-page .contact-grid > .about-intro { grid-column: auto; }
@@ -434,6 +442,16 @@ a.page-num:hover, a.page-step:hover { background: var(--navy); color: #fff; bord
 .gallery-viewer [role="status"] { text-align: center; }
 .gallery-viewer img { display: block; max-width: 100%; max-height: 65vh; margin: auto; object-fit: contain; }
 .gallery-viewer-caption { margin-top: 1rem; text-align: center; }
+main:has(> .gallery-viewer) .page-head, main:has(> .gallery-viewer) .gallery-photo,
+main:has(> .gallery-viewer) .empty, main:has(> .gallery-viewer) .btn,
+main:has(> .gallery-viewer) .gallery-viewer { border-radius: var(--radius); }
+main:has(> .gallery-viewer) .page-head::before, main:has(> .gallery-viewer) .gallery-photo::before,
+main:has(> .gallery-viewer) .empty::before, main:has(> .gallery-viewer) .btn::before {
+  border-radius: calc(var(--radius) - var(--rim));
+}
+main:has(> .gallery-viewer) .gallery-photo a, main:has(> .gallery-viewer) .gallery-photo img,
+main:has(> .gallery-viewer) .gallery-viewer img { border-radius: calc(var(--radius) - 4px); }
+main:has(> .gallery-viewer) .page-num, main:has(> .gallery-viewer) .page-step { border-radius: .5rem; }
 .gallery-grid [hidden], .gallery-upload [hidden] { display: none; }
 .gallery-order-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 1rem; }
 .gallery-order-card { display: flex; flex-direction: column; gap: .75rem; padding: 1rem; }
