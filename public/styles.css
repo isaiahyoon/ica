@@ -185,7 +185,7 @@ main.wide { max-width: 1200px; }
 .hero .actions [href="/about"] { grid-area: about; }
 .hero .actions [href="/sermons"] { grid-area: sermons; }
 .hero .actions [href="/gallery"] { grid-area: gallery; }
-.hero .actions [href="/columns"] { grid-area: articles; }
+.hero .actions [href="/articles"] { grid-area: articles; }
 .hero .actions [href="/contact"] { grid-area: contact; }
 @media (min-width: 681px) {
   .hero .actions {
@@ -606,13 +606,14 @@ audio { width: 100%; margin-top: .5rem; }
 .column-editor-language h2 { margin: 0; font-size: 1.3rem; }
 .column-editor-surface {
   min-height: 14rem; padding: 1rem; border: 2px solid; border-image: var(--silver) 1;
-  background: var(--paper); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--paper); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; overflow-anchor: none;
 }
 .column-editor-surface:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .column-editor-surface img { display: block; max-width: 100%; max-height: 24rem; width: auto; height: auto; margin: 1rem auto; }
 .column-editor-tools { display: grid; gap: .5rem; }
 .column-formatting { display: flex; flex-wrap: wrap; gap: .5rem; }
-.column-editor-tools .column-formatting button { min-width: 48px; min-height: 48px; margin: 0; }
+.column-editor-tools .column-formatting button { display: grid; place-content: center; justify-items: center; gap: .1rem; min-width: 48px; min-height: 48px; margin: 0; padding: .25rem .4rem; }
+.column-editor-tools kbd { color: var(--muted); font: 400 .65rem var(--sans); }
 .column-editor-tools details { padding: .8rem; border: 1px solid var(--line); background: var(--paper); }
 .column-editor-tools summary { cursor: pointer; color: var(--navy); }
 .column-editor-tools label, .column-editor-tools button { margin-top: .75rem; }

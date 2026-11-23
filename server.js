@@ -108,6 +108,15 @@ export function createApp({
     }
     next();
   });
+  app.use((req, res, next) => {
+    const path = req.path.replace(/^\/admin\/columns(?=\/|$)/, '/admin/articles')
+      .replace(/^\/columns(?=\/|$)/, '/articles');
+    if (path === req.path) return next();
+    const location = `${path}${req.url.slice(req.path.length)}`;
+    if (req.method === 'GET' || req.method === 'HEAD') return res.redirect(301, location);
+    req.url = location;
+    next();
+  });
   app.use(express.urlencoded({ extended: false, limit: '128kb', parameterLimit: 30 }));
   app.use(express.static(pub));
   app.use('/uploads/audio', express.static(audioDir, { index: false, dotfiles: 'deny' }));
@@ -223,7 +232,7 @@ export function createApp({
   const adminView = async (req, res, status = 200, extra = {}) => {
     const sermons = await store.read('sermons');
     const columns = await store.read('columns');
-    const section = req.path === '/admin/sermons' ? 'sermons' : req.path === '/admin/columns' ? 'columns' : 'home';
+    const section = req.path === '/admin/sermons' ? 'sermons' : req.path === '/admin/articles' ? 'columns' : 'home';
     const columnIds = new Set(columns.map((column) => column.id));
     const pendingComments = section === 'sermons' ? 0 : (await store.read('column-engagement'))
       .filter((record) => columnIds.has(record.id))
@@ -240,7 +249,7 @@ export function createApp({
 
   app.get('/admin', auth.requireAdmin, (req, res, next) => adminView(req, res, 200, { notice: req.query.notice }).catch(next));
   app.get('/admin/sermons', auth.requireAdmin, (req, res, next) => adminView(req, res, 200, { notice: req.query.notice }).catch(next));
-  app.get('/admin/columns', auth.requireAdmin, (req, res, next) => adminView(req, res).catch(next));
+  app.get('/admin/articles', auth.requireAdmin, (req, res, next) => adminView(req, res).catch(next));
 
   app.post('/admin/pastors', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, (req, res, next) => {
     (async () => {
