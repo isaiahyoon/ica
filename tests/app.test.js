@@ -473,6 +473,8 @@ test('article likes and comments require verification and admin moderation', asy
   const token = page.match(/name="_reader" value="([^"]+)"/)[1];
   assert.ok(page.indexOf('class="column-footer"') < page.indexOf('id="article-engagement"'));
   assert.match(page, /class="column-response-link" href="#article-comments"/);
+  assert.match(page, /class="column-toast" data-column-toast role="status" aria-live="polite"/);
+  assert.doesNotMatch(page, /data-like-status|data-comment-status/);
   assert.match(page, /<details class="column-response">[\s\S]*name="name"[\s\S]*name="email"[\s\S]*name="comment"/);
   assert.ok(page.indexOf('class="column-reactions"') < page.indexOf('class="column-response"'));
   assert.ok(page.indexOf('class="column-response"') < page.indexOf('No comments yet.'));
@@ -615,7 +617,7 @@ for (const viewport of ['desktop', 'mobile']) {
     let submit;
     const form = {
       action: 'https://example.com/articles/rest/like',
-      querySelector: (selector) => selector === '[data-like-status]' ? status : selector === '[name="like_action"]' ? action : button,
+      querySelector: (selector) => selector === '[name="like_action"]' ? action : button,
       addEventListener: (_name, handler) => { submit = handler; },
     };
     const window = { location: { origin: 'https://example.com', href: 'https://example.com/articles/rest?lang=en#article-body' } };
@@ -624,11 +626,11 @@ for (const viewport of ['desktop', 'mobile']) {
     let pending;
     let result = { liked: true, likes: 7 };
     runInNewContext(source, {
-      document: { querySelector: (selector) => selector === '.column-comment-form' ? {
+      document: { querySelector: (selector) => selector === '[data-column-toast]' ? status : selector === '.column-comment-form' ? {
         querySelector: () => ({ textContent: '', disabled: false }),
         addEventListener() {},
       } : form },
-      window, URL, URLSearchParams,
+      window, URL, URLSearchParams, setTimeout: () => 1, clearTimeout() {},
       FormData: class { *[Symbol.iterator]() { yield ['_reader', 'token']; yield ['like_action', action.value]; } },
       fetch: async (_url, options) => {
         request = options;
@@ -649,7 +651,8 @@ for (const viewport of ['desktop', 'mobile']) {
     assert.deepEqual(label.children.map((child) => child.textContent), ['Liked', '좋아요 완료']);
     assert.equal(count.textContent, '7');
     assert.equal(count['aria-label'], 'Likes · 좋아요 수: 7');
-    assert.equal(status.textContent, '');
+    assert.match(status.textContent, /^Article liked\./);
+    assert.doesNotMatch(status.textContent, /Thank you/);
     assert.ok(classes.has('like-pop'));
     result = { liked: false, likes: 6 };
     await submit({ preventDefault() {} });
@@ -658,6 +661,7 @@ for (const viewport of ['desktop', 'mobile']) {
     assert.equal(button['aria-pressed'], 'false');
     assert.deepEqual(label.children.map((child) => child.textContent), ['Like', '좋아요']);
     assert.equal(count.textContent, '6');
+    assert.match(status.textContent, /^Like removed\./);
     assert.deepEqual([...classes], ['like-deflate']);
     result = { liked: 'bad', likes: -1 };
     await submit({ preventDefault() {} });
@@ -687,13 +691,14 @@ for (const viewport of ['desktop', 'mobile']) {
     let response = { ok: true, redirected: true, url: 'https://example.com/articles/rest?lang=en&status=submitted#article-engagement' };
     const form = {
       action: 'https://example.com/articles/rest/comments',
-      querySelector: (selector) => selector === '[data-comment-status]' ? status : button,
+      querySelector: () => button,
       addEventListener: (_name, handler) => { submit = handler; },
       reset: () => { resets++; },
     };
     const window = { location: { origin: 'https://example.com', href: 'https://example.com/articles/rest?lang=en' } };
     runInNewContext(source, {
-      document: { querySelector: () => form }, window, URL, URLSearchParams,
+      document: { querySelector: (selector) => selector === '[data-column-toast]' ? status : form },
+      window, URL, URLSearchParams, setTimeout: () => 1, clearTimeout() {},
       FormData: class { *[Symbol.iterator]() { yield ['comment', 'Hello']; } },
       fetch: async () => response,
     });
@@ -701,7 +706,7 @@ for (const viewport of ['desktop', 'mobile']) {
     await submit({ preventDefault() { prevented = true; } });
     assert.equal(prevented, true);
     assert.equal(window.location.href, 'https://example.com/articles/rest?lang=en');
-    assert.match(status.textContent, /comment will appear after review/);
+    assert.match(status.textContent, /Comment submitted for review/);
     assert.equal(resets, 1);
     assert.equal(button.disabled, false);
     response = { ok: false, status: 429, redirected: false, url: 'https://example.com/articles/rest/comments' };
@@ -1880,28 +1885,37 @@ test('sermons can be shared with the native share sheet or copied as a link', as
 
   const createHandler = (navigator) => {
     let handler;
+    let timerId = 0;
+    const timers = new Map();
     const location = { origin: base, href: '' };
     runInNewContext(script, {
       document: { addEventListener: (_type, callback) => { handler = callback; } },
-      navigator, location, URL, setTimeout: () => 0,
+      navigator, location, URL,
+      setTimeout: (callback) => { const id = ++timerId; timers.set(id, callback); return id; },
+      clearTimeout: (id) => timers.delete(id),
     });
 
+    const createLink = (shareTitle) => {
+      const feedback = { textContent: '' };
+      const classes = new Set();
+      return {
+        dataset: { shareTitle, copied: 'Link copied · 링크 복사됨' }, innerHTML: shareTitle || 'Copy link',
+        getAttribute: () => '/sermons/share-id',
+        querySelector: () => feedback,
+        classList: { add: (name) => classes.add(name), remove: (name) => classes.delete(name), contains: (name) => classes.has(name) },
+        feedback,
+      };
+    };
     const links = {
-      share: {
-        dataset: { shareTitle: 'A sermon', copied: 'Link copied · 링크 복사됨' }, innerHTML: 'Share sermon', textContent: '',
-        getAttribute: () => '/sermons/share-id',
-      },
-      copy: {
-        dataset: { copied: 'Link copied · 링크 복사됨' }, innerHTML: 'Copy link', textContent: '',
-        getAttribute: () => '/sermons/share-id',
-      },
+      share: createLink('A sermon'),
+      copy: createLink(''),
     };
     const eventFor = (action) => ({
       target: { closest: (selector) => selector === `.${action}-link` ? links[action] : null },
       prevented: false,
       preventDefault() { this.prevented = true; },
     });
-    return { handler, links, eventFor, location };
+    return { handler, links, eventFor, location, timers };
   };
 
   const shared = [];
@@ -1918,7 +1932,8 @@ test('sermons can be shared with the native share sheet or copied as a link', as
   const shareFallback = createHandler({ clipboard: { writeText: async (url) => { copied = url; } } });
   await shareFallback.handler(shareFallback.eventFor('share'));
   assert.equal(copied, `${base}/sermons/share-id`);
-  assert.equal(shareFallback.links.share.textContent, 'Link copied · 링크 복사됨');
+  assert.equal(shareFallback.links.share.feedback.textContent, 'Link copied · 링크 복사됨');
+  assert.equal(shareFallback.links.share.classList.contains('copy-confirmed'), true);
 
   const fallback = createHandler({
     share: async () => assert.fail('Copy link should not open the share sheet'),
@@ -1928,7 +1943,14 @@ test('sermons can be shared with the native share sheet or copied as a link', as
   await fallback.handler(copyEvent);
   assert.equal(copyEvent.prevented, true);
   assert.equal(copied, `${base}/sermons/share-id`);
-  assert.equal(fallback.links.copy.textContent, 'Link copied · 링크 복사됨');
+  assert.equal(fallback.links.copy.feedback.textContent, 'Link copied · 링크 복사됨');
+  assert.equal(fallback.links.copy.classList.contains('copy-confirmed'), true);
+  assert.equal(fallback.links.copy.innerHTML, 'Copy link');
+  await fallback.handler(fallback.eventFor('copy'));
+  assert.equal(fallback.timers.size, 1);
+  [...fallback.timers.values()][0]();
+  assert.equal(fallback.links.copy.classList.contains('copy-confirmed'), false);
+  assert.equal(fallback.links.copy.feedback.textContent, '');
 
   const canceled = createHandler({
     share: async () => { throw Object.assign(new Error('Canceled'), { name: 'AbortError' }); },
