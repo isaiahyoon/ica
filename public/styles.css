@@ -503,6 +503,17 @@ main:has(> .gallery-viewer) .page-num, main:has(> .gallery-viewer) .page-step { 
 .sermon-actions .share-link { --fill: linear-gradient(135deg, var(--pink), var(--lavender)); }
 .sermon-actions .copy-link { --fill: linear-gradient(135deg, var(--yellow), var(--blue)); }
 .sermon-action .bilingual { flex-direction: row; flex-wrap: wrap; gap: .25em .6em; align-items: baseline; }
+.copy-feedback { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.copy-confirmed > :not(.copy-feedback) { visibility: hidden; }
+.copy-confirmed::after { content: "✓"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--deep-teal); font: 400 1.6rem/1 var(--sans); pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .copy-confirmed::after { animation: copy-check-pop .3s ease-out; }
+}
+@keyframes copy-check-pop {
+  0% { transform: scale(.65); opacity: 0; }
+  70% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); }
+}
 .meta { margin: 0 0 .5rem; color: var(--muted); font-size: .95rem; }
 .scripture { font: 1.05rem var(--serif); color: var(--deep-teal); margin: 0 0 .5rem; }
 .sermon h3:lang(ko), .sermon .scripture:lang(ko) { font-family: var(--serif-ko); }
@@ -581,6 +592,8 @@ audio { width: 100%; margin-top: .5rem; }
 .column-languages a { min-height: 48px; display: inline-flex; align-items: center; padding: .5rem 1rem; border: 1px solid var(--line); border-radius: var(--radius); color: var(--navy); background: var(--canvas); }
 .column-languages a[aria-current="page"] { background: var(--navy); color: var(--paper); }
 .column-engagement { margin: 2rem 0; }
+.column-toast { position: fixed; z-index: 20; right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom)); max-width: min(25rem, calc(100vw - 2rem)); padding: .8rem 1rem; background: var(--navy); color: var(--paper); border: 2px solid var(--brass-soft); box-shadow: var(--shadow); font: 400 .9rem/1.5 var(--sans); overflow-wrap: anywhere; pointer-events: none; }
+.column-toast:empty { padding: 0; border: 0; box-shadow: none; }
 .column-reactions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.5rem; padding: .6rem 0; border-block: 1px solid var(--line); }
 .column-like, .column-response-link { display: inline-flex; align-items: center; gap: .5rem; min-height: 48px; padding: .35rem .4rem; border: 0; background: none; color: var(--deep-teal); cursor: pointer; font: 400 .9rem var(--sans); text-decoration: none; }
 .column-like .bilingual, .column-response-link .bilingual { flex-direction: row; flex-wrap: wrap; gap: .3rem; }

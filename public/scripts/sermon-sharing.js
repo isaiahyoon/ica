@@ -1,3 +1,5 @@
+const copyTimers = new WeakMap();
+
 document.addEventListener('click', async (event) => {
   const share = event.target.closest('.share-link');
   const copy = event.target.closest('.copy-link');
@@ -29,7 +31,13 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
-  const originalContent = link.innerHTML;
-  link.textContent = link.dataset.copied;
-  setTimeout(() => { link.innerHTML = originalContent; }, 2000);
+  const feedback = link.querySelector('.copy-feedback');
+  clearTimeout(copyTimers.get(link));
+  link.classList.add('copy-confirmed');
+  feedback.textContent = link.dataset.copied;
+  copyTimers.set(link, setTimeout(() => {
+    link.classList.remove('copy-confirmed');
+    feedback.textContent = '';
+    copyTimers.delete(link);
+  }, 2000));
 });
