@@ -674,6 +674,19 @@ test('article likes and comments require verification and admin moderation', asy
     const dashboard = await (await fetch(base + route, { headers: { cookie: adminCookie } })).text();
     assert.doesNotMatch(dashboard, /comment is awaiting review/);
   }
+  const adminPost = (action, csrf = adminToken) => fetch(base + action, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie: adminCookie },
+    body: new URLSearchParams({ _csrf: csrf }),
+  });
+  assert.equal((await adminPost(action.replace(/\/approve$/, '/delete'))).status, 302);
+  let deletedModeration = await (await fetch(`${base}/admin/articles/comments`, { headers: { cookie: adminCookie } })).text();
+  assert.match(deletedModeration, /Deleted comments/);
+  assert.match(deletedModeration, /Restore/);
+  assert.doesNotMatch(await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text(), /&lt;script&gt;hello&lt;\/script&gt;/);
+  const approvedRestore = deletedModeration.match(/action="([^"]+\/restore)"/)[1];
+  assert.equal((await adminPost(approvedRestore, 'bad')).status, 403);
+  assert.equal((await adminPost(approvedRestore)).status, 302);
+  assert.equal((await adminPost(approvedRestore)).status, 409);
   html = await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text();
   assert.match(html, /<ol class="column-comments">/);
   assert.ok(html.indexOf('class="column-response"') < html.indexOf('<ol class="column-comments">'));
@@ -686,12 +699,21 @@ test('article likes and comments require verification and admin moderation', asy
   const pending = await (await fetch(`${base}/admin`, { headers: { cookie: adminCookie } })).text();
   assert.match(pending, /2 comments are awaiting review/);
   const review = await (await fetch(`${base}/admin/articles/comments`, { headers: { cookie: adminCookie } })).text();
+  const pendingDelete = [...review.matchAll(/<article class="admin-column-comment">([\s\S]*?)<\/article>/g)]
+    .find(([, card]) => card.includes('Another reader'))[1]
+    .match(/action="([^"]+\/delete)"/)[1];
   for (const [, deleteAction] of review.matchAll(/action="([^"]+\/delete)"/g)) {
-    assert.equal((await fetch(base + deleteAction, {
-      method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie: adminCookie },
-      body: new URLSearchParams({ _csrf: adminToken }),
-    })).status, 302);
+    assert.equal((await adminPost(deleteAction)).status, 302);
   }
+  deletedModeration = await (await fetch(`${base}/admin/articles/comments`, { headers: { cookie: adminCookie } })).text();
+  const pendingCommentId = pendingDelete.match(/\/([^/]+)\/delete$/)[1];
+  const pendingRestore = [...deletedModeration.matchAll(/action="([^"]+\/restore)"/g)]
+    .map(([, actionPath]) => actionPath)
+    .find((actionPath) => actionPath.endsWith(`/${pendingCommentId}/restore`));
+  assert.equal((await adminPost(pendingRestore)).status, 302);
+  assert.match(await (await fetch(`${base}/admin`, { headers: { cookie: adminCookie } })).text(), /1 comment is awaiting review/);
+  assert.doesNotMatch(await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text(), /A second comment/);
+  assert.equal((await adminPost(pendingRestore.replace(/\/restore$/, '/delete'))).status, 302);
   assert.doesNotMatch(await (await fetch(`${base}/admin`, { headers: { cookie: adminCookie } })).text(), /awaiting review/);
 });
 

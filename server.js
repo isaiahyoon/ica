@@ -237,7 +237,7 @@ export function createApp({
     const engagement = section === 'sermons' ? [] : (await store.read('column-engagement'))
       .filter((record) => columnIds.has(record.id));
     const pendingComments = engagement
-      .reduce((count, record) => count + record.comments.filter((comment) => !comment.approved).length, 0);
+      .reduce((count, record) => count + record.comments.filter((comment) => !comment.approved && !comment.deletedAt).length, 0);
     const likeNotifications = engagement.filter((record) => (record.likeNoticeSequence || 0) > (record.likeNoticeReadThrough || 0))
       .map((record) => ({ column: columns.find((column) => column.id === record.id), count: record.likeNoticeSequence - (record.likeNoticeReadThrough || 0), through: record.likeNoticeSequence }));
     if (auth.isOwner(req)) extra = { ...extra, admins: await admins.list() };
