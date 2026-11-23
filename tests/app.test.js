@@ -482,10 +482,26 @@ test('article likes and comments require verification and admin moderation', asy
   });
   assert.equal((await post('/columns/rest/like', {}, { origin: 'https://other.example' })).status, 403);
   assert.equal((await post('/columns/rest/like', { _reader: 'bad' })).status, 403);
-  assert.equal((await post('/columns/rest/like', {})).status, 302);
-  assert.equal((await post('/columns/rest/like', {})).status, 302);
+  assert.equal((await post('/columns/rest/like', { like_action: 'invalid' })).status, 400);
+  assert.match((await post('/columns/rest/like', { like_action: 'like' })).headers.get('location'), /status=liked/);
+  assert.equal((await post('/columns/rest/like', { like_action: 'like' })).status, 302);
   let html = await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text();
-  assert.match(html, /disabled>[\s\S]*Liked[\s\S]*좋아요 수">1/);
+  assert.match(html, /name="like_action" value="unlike"[\s\S]*aria-pressed="true"[\s\S]*Liked[\s\S]*좋아요 수: 1">1/);
+  const secondResponse = await fetch(`${base}/articles/rest?lang=en`);
+  const secondReader = secondResponse.headers.get('set-cookie').split(';')[0];
+  const secondToken = (await secondResponse.text()).match(/name="_reader" value="([^"]+)"/)[1];
+  const secondLike = await fetch(`${base}/articles/rest/like`, {
+    method: 'POST', headers: { ...FORM(base), cookie: secondReader, accept: 'application/json' },
+    body: new URLSearchParams({ _reader: secondToken, like_action: 'like' }),
+  });
+  assert.deepEqual(await secondLike.json(), { liked: true, likes: 2 });
+  const unlike = await post('/articles/rest/like', { like_action: 'unlike' }, { accept: 'application/json' });
+  assert.deepEqual(await unlike.json(), { liked: false, likes: 1 });
+  assert.deepEqual(await (await post('/articles/rest/like', { like_action: 'unlike' }, { accept: 'application/json' })).json(), { liked: false, likes: 1 });
+  html = await (await fetch(`${base}/articles/rest?lang=en`, { headers: { cookie: reader } })).text();
+  assert.match(html, /name="like_action" value="like"[\s\S]*aria-pressed="false"[\s\S]*좋아요 수: 1">1/);
+  assert.match((await post('/articles/rest/like', { like_action: 'like' })).headers.get('location'), /status=liked/);
+  assert.match((await post('/articles/rest/like', { like_action: 'unlike' })).headers.get('location'), /status=unliked/);
   assert.equal((await post('/columns/rest/comments', { name: 'Reader', email: 'bad', comment: 'Hello' })).status, 400);
   assert.equal((await post('/columns/rest/comments', { name: '<Reader>', email: 'private@example.com', comment: '<script>hello</script>' })).status, 302);
   html = await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text();
@@ -579,33 +595,46 @@ test('article storage failures return an error response', async (t) => {
 });
 
 for (const viewport of ['desktop', 'mobile']) {
-  test(`liking an article keeps the ${viewport} page in place`, async () => {
+  test(`liking and unliking an article keeps the ${viewport} page in place`, async () => {
     const source = await fs.readFile(new URL('../public/scripts/column-comment.js', import.meta.url), 'utf8');
     const status = { textContent: '' };
     const label = { children: [{ textContent: 'Like' }, { textContent: '좋아요' }] };
-    const count = { textContent: '4' };
+    const count = { textContent: '4', setAttribute(name, value) { this[name] = value; } };
+    const classes = new Set();
+    const heart = {
+      classList: { remove: (...names) => names.forEach((name) => classes.delete(name)), add: (name) => classes.add(name) },
+      getBoundingClientRect() {},
+    };
+    const action = { value: 'like' };
     const button = {
       disabled: false,
-      querySelector: (selector) => selector === '.bilingual' ? label : count,
+      setAttribute(name, value) { this[name] = value; },
+      removeAttribute(name) { delete this[name]; },
+      querySelector: (selector) => selector === '.bilingual' ? label : selector === 'svg' ? heart : count,
     };
     let submit;
     const form = {
       action: 'https://example.com/articles/rest/like',
-      querySelector: (selector) => selector === '[data-like-status]' ? status : button,
+      querySelector: (selector) => selector === '[data-like-status]' ? status : selector === '[name="like_action"]' ? action : button,
       addEventListener: (_name, handler) => { submit = handler; },
     };
     const window = { location: { origin: 'https://example.com', href: 'https://example.com/articles/rest?lang=en#article-body' } };
     let request;
+    let requests = 0;
+    let pending;
+    let result = { liked: true, likes: 7 };
     runInNewContext(source, {
       document: { querySelector: (selector) => selector === '.column-comment-form' ? {
         querySelector: () => ({ textContent: '', disabled: false }),
         addEventListener() {},
       } : form },
       window, URL, URLSearchParams,
-      FormData: class { *[Symbol.iterator]() { yield ['_reader', 'token']; } },
+      FormData: class { *[Symbol.iterator]() { yield ['_reader', 'token']; yield ['like_action', action.value]; } },
       fetch: async (_url, options) => {
         request = options;
-        return { ok: true, redirected: true, url: 'https://example.com/articles/rest?lang=en&status=liked#article-engagement' };
+        requests++;
+        if (pending) await pending;
+        return { ok: true, json: async () => result };
       },
     });
     let prevented = false;
@@ -614,9 +643,39 @@ for (const viewport of ['desktop', 'mobile']) {
     assert.equal(request.method, 'POST');
     assert.equal(request.credentials, 'same-origin');
     assert.equal(window.location.href, 'https://example.com/articles/rest?lang=en#article-body');
-    assert.equal(button.disabled, true);
+    assert.equal(request.body.get('like_action'), 'like');
+    assert.equal(button.disabled, false);
+    assert.equal(button['aria-pressed'], 'true');
     assert.deepEqual(label.children.map((child) => child.textContent), ['Liked', '좋아요 완료']);
-    assert.equal(count.textContent, '5');
+    assert.equal(count.textContent, '7');
+    assert.equal(count['aria-label'], 'Likes · 좋아요 수: 7');
+    assert.equal(status.textContent, '');
+    assert.ok(classes.has('like-pop'));
+    result = { liked: false, likes: 6 };
+    await submit({ preventDefault() {} });
+    assert.equal(request.body.get('like_action'), 'unlike');
+    assert.equal(action.value, 'like');
+    assert.equal(button['aria-pressed'], 'false');
+    assert.deepEqual(label.children.map((child) => child.textContent), ['Like', '좋아요']);
+    assert.equal(count.textContent, '6');
+    assert.deepEqual([...classes], ['like-deflate']);
+    result = { liked: 'bad', likes: -1 };
+    await submit({ preventDefault() {} });
+    assert.match(status.textContent, /reload the page/i);
+    assert.equal(button.disabled, false);
+    assert.equal(count.textContent, '6');
+    let release;
+    pending = new Promise((resolve) => { release = resolve; });
+    result = { liked: true, likes: 7 };
+    const first = submit({ preventDefault() {} });
+    assert.equal(button['aria-busy'], 'true');
+    assert.equal(button.disabled, false);
+    await submit({ preventDefault() {} });
+    assert.equal(requests, 4);
+    release();
+    await first;
+    assert.equal(button['aria-busy'], undefined);
+    assert.equal(button['aria-pressed'], 'true');
   });
 
   test(`comment submission keeps the ${viewport} page in place and preserves input on failure`, async () => {

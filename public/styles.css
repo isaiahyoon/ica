@@ -585,9 +585,25 @@ audio { width: 100%; margin-top: .5rem; }
 .column-like, .column-response-link { display: inline-flex; align-items: center; gap: .5rem; min-height: 48px; padding: .35rem .4rem; border: 0; background: none; color: var(--deep-teal); cursor: pointer; font: 400 .9rem var(--sans); text-decoration: none; }
 .column-like .bilingual, .column-response-link .bilingual { flex-direction: row; flex-wrap: wrap; gap: .3rem; }
 .column-like svg, .column-response-link svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.column-like:disabled { cursor: default; color: var(--navy); }
-.column-like:disabled svg { fill: var(--pink); }
-.column-like:hover:not(:disabled), .column-response-link:hover { color: var(--navy); text-decoration: underline; }
+.column-like[aria-pressed="true"] { color: var(--navy); }
+.column-like[aria-pressed="true"] svg { fill: var(--pink); }
+.column-like[aria-busy="true"] { cursor: wait; }
+.column-like:hover, .column-response-link:hover { color: var(--navy); text-decoration: underline; }
+@media (prefers-reduced-motion: no-preference) {
+  .column-like svg.like-pop { animation: column-like-pop .45s ease-out; }
+  .column-like svg.like-deflate { animation: column-like-deflate .35s ease-out; }
+}
+@keyframes column-like-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.35); }
+  70% { transform: scale(.9); }
+  100% { transform: scale(1); }
+}
+@keyframes column-like-deflate {
+  0% { transform: scale(1); }
+  55% { transform: scale(.7); }
+  100% { transform: scale(1); }
+}
 #article-comments { scroll-margin-top: 8rem; padding-top: 2rem; }
 .column-engagement h2 { font-size: 1.65rem; }
 .column-comment-count { color: var(--muted); font: 400 .9rem var(--sans); }
