@@ -206,17 +206,20 @@ export function createApp({
   const adminView = async (req, res, status = 200, extra = {}) => {
     const sermons = await store.read('sermons');
     const columns = await store.read('columns');
+    const section = req.path === '/admin/sermons' ? 'sermons' : req.path === '/admin/columns' ? 'columns' : 'home';
     if (auth.isOwner(req)) extra = { ...extra, admins: await admins.list() };
     res.set('Cache-Control', 'no-store');
     res.status(status).send(renderPage(req, {
       title: 'Admin', active: 'admin', admin: true,
-      body: view.adminPage({ sermons, columns, pastors: await readPastors(), csrfToken: auth.csrfToken(req), ...extra }),
+      body: view.adminPage({ sermons, columns, section, pastors: await readPastors(), csrfToken: auth.csrfToken(req), ...extra }),
     }));
   };
 
   mountAdminAuth({ app, admins, loginLimiter, adminView, ownerPassword: password });
 
   app.get('/admin', auth.requireAdmin, (req, res) => adminView(req, res, 200, { notice: req.query.notice }));
+  app.get('/admin/sermons', auth.requireAdmin, (req, res) => adminView(req, res, 200, { notice: req.query.notice }));
+  app.get('/admin/columns', auth.requireAdmin, (req, res) => adminView(req, res));
 
   app.post('/admin/pastors', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, (req, res, next) => {
     (async () => {
@@ -364,7 +367,7 @@ export function createApp({
         description: clean(req.body.description, 10000),
         file: filename, createdAt: new Date().toISOString(),
       }]);
-      res.redirect('/admin?notice=' + encodeURIComponent('Sermon uploaded.'));
+      res.redirect('/admin/sermons?notice=' + encodeURIComponent('Sermon uploaded.'));
     });
 
   app.post('/admin/sermons/:id/audio', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, (req, res, next) => {

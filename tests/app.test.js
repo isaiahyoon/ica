@@ -44,6 +44,7 @@ test('pastor list is persistent and removal leaves saved sermons unchanged', asy
     method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie, ...headers },
     body: new URLSearchParams({ _csrf: token, ...body }),
   });
+
   assert.equal((await fetch(`${base}/admin/pastors`, { method: 'POST', redirect: 'manual' })).status, 302);
   assert.equal((await post('/admin/pastors', { en: 'Grace', ko: '은혜' }, { origin: 'https://other.example' })).status, 403);
   assert.equal((await post('/admin/pastors', { _csrf: 'invalid', en: 'Grace', ko: '은혜' })).status, 403);
@@ -67,6 +68,27 @@ test('pastor list is persistent and removal leaves saved sermons unchanged', asy
   assert.doesNotMatch(await admin(), /Pastor John Yoon/);
   assert.equal((await post('/admin/pastors/john-yoon/delete', {})).status, 404);
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(dataDir, 'pastors.json'), 'utf8')).entries, []);
+});
+
+test('admin dashboard links to separate content management pages', async (t) => {
+  const { base, close } = await boot();
+  t.after(close);
+  for (const route of ['/admin/sermons', '/admin/columns', '/admin/gallery']) {
+    assert.equal((await fetch(base + route, { redirect: 'manual' })).status, 302);
+  }
+  const cookie = await login(base);
+  const dashboard = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
+  for (const route of ['/admin/sermons', '/admin/columns', '/admin/gallery']) {
+    assert.ok(dashboard.includes(`href="${route}"`));
+  }
+  assert.doesNotMatch(dashboard, /id="sermon-upload-form"|href="\/admin\/columns\/new"/);
+  const sermons = await (await fetch(`${base}/admin/sermons`, { headers: { cookie } })).text();
+  assert.match(sermons, /id="sermon-upload-form"/);
+  assert.match(sermons, /href="\/admin"/);
+  const columns = await (await fetch(`${base}/admin/columns`, { headers: { cookie } })).text();
+  assert.match(columns, /href="\/admin\/columns\/new"/);
+  assert.match(columns, /href="\/admin\/columns\/comments"/);
+  assert.doesNotMatch(columns, /id="sermon-upload-form"/);
 });
 
 test('multiple bilingual Scripture passages link each split range without accepting conflicts', () => {
@@ -299,6 +321,22 @@ test('article language links and previews follow the shared language and author'
   assert.equal((await fetch(`${base}/columns/missing/preview.png`)).status, 404);
 });
 
+test('article language preference preserves explicit links', async () => {
+  const source = await fs.readFile(new URL('../public/scripts/column-language.js', import.meta.url), 'utf8');
+  const execute = (href, languages, language = '') => {
+    let destination = '';
+    runInNewContext(source, {
+      URL, navigator: { languages, language },
+      window: { location: { href, replace: (value) => { destination = value; } } },
+    });
+    return destination;
+  };
+  assert.equal(execute('https://example.com/columns/rest', ['fr', 'ko-KR']), 'https://example.com/columns/rest?lang=ko');
+  assert.equal(execute('https://example.com/columns/rest', ['fr']), 'https://example.com/columns/rest?lang=en');
+  assert.equal(execute('https://example.com/columns/rest', [], 'ko-KR'), 'https://example.com/columns/rest?lang=ko');
+  assert.equal(execute('https://example.com/columns/rest?lang=en', ['ko']), '');
+});
+
 test('article likes and comments require verification and admin moderation', async (t) => {
   const { base, dataDir, close } = await boot();
   t.after(close);
@@ -310,6 +348,7 @@ test('article likes and comments require verification and admin moderation', asy
   const reader = response.headers.get('set-cookie').split(';')[0];
   const page = await response.text();
   const token = page.match(/name="_reader" value="([^"]+)"/)[1];
+  assert.ok(page.indexOf('class="column-footer"') < page.indexOf('id="article-engagement"'));
   const post = (url, values, headers = {}) => fetch(base + url, {
     method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie: reader, ...headers },
     body: new URLSearchParams({ _reader: token, lang: 'en', ...values }),
@@ -1659,7 +1698,7 @@ test('sermon fields preserve line breaks and service through upload and editing'
   t.after(close);
   const cookie = await login(base);
   const csrf = await csrfToken(base, cookie);
-  const admin = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
+  const admin = await (await fetch(`${base}/admin/sermons`, { headers: { cookie } })).text();
   assert.match(admin, /<span lang="en">Sermon Overview<\/span><span lang="ko">설교 개요<\/span>[\s\S]*?<textarea name="description"[^>]*aria-label="Sermon Overview · 설교 개요"/);
   for (const name of ['title', 'speakerEn', 'speakerKo', 'scripture', 'description']) {
     assert.match(admin, new RegExp(`<textarea name="${name}"`));
@@ -1928,7 +1967,7 @@ test('sermon overviews accept up to 10000 characters on upload and edit', async 
   const cookie = await login(base);
   const csrf = await csrfToken(base, cookie);
   const overview = '설'.repeat(10000);
-  const admin = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
+  const admin = await (await fetch(`${base}/admin/sermons`, { headers: { cookie } })).text();
   assert.match(admin, /<textarea name="description" rows="3" maxlength="10000"/);
 
   const upload = new FormData();
@@ -2136,7 +2175,7 @@ test('admin can stage audio immediately and publish it with sermon details', asy
   t.after(close);
   const cookie = await login(base);
   const csrf = await csrfToken(base, cookie);
-  const page = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
+  const page = await (await fetch(`${base}/admin/sermons`, { headers: { cookie } })).text();
   assert.match(page, /<script src="\/scripts\/admin\.js" defer><\/script>/);
   assert.doesNotMatch(page, /<script>([\s\S]*?)<\/script>/);
   assert.match(page, /id="sermon-upload-form"/);
