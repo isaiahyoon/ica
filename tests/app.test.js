@@ -178,9 +178,10 @@ test('pastors publish bilingual columns with escaped text, an image, video, and 
   const source = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
   assert.match(source, /\.column-card::before/);
   assert.match(source, /\.column-card-link:focus-visible\s*\{[^}]*outline:/);
-  assert.match(source, /\.column-card-link\.has-image\s*\{[^}]*grid-template-columns:\s*minmax\(180px, 35%\) minmax\(0, 1fr\)/);
+  assert.match(source, /\.column-card-link\.has-image\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(120px, 25%\)/);
   assert.match(source, /@media \(max-width: 560px\)/);
-  assert.match(source, /\.column-card-link\.has-image \{ grid-template-columns: 1fr; \}/);
+  assert.match(source, /\.column-card-link\.has-image \{ grid-template-columns: minmax\(0, 1fr\) minmax\(84px, 28%\)/);
+  assert.match(source, /\.column-card-image\s*\{[^}]*order:\s*2/);
   assert.match(source, /\.columns-page \.page-head, \.column-card, \.column-article, \.column-feature, \.column-video-link,[\s\S]*?border-radius: var\(--radius\)/);
   assert.match(source, /\.column-reading\s*\{[^}]*max-width:\s*47rem/s);
   assert.match(source, /\.column-language p\s*\{[^}]*overflow-wrap:\s*anywhere/s);
@@ -349,6 +350,10 @@ test('article likes and comments require verification and admin moderation', asy
   const page = await response.text();
   const token = page.match(/name="_reader" value="([^"]+)"/)[1];
   assert.ok(page.indexOf('class="column-footer"') < page.indexOf('id="article-engagement"'));
+  assert.match(page, /class="column-response-link" href="#article-comments"/);
+  assert.match(page, /<details class="column-response">[\s\S]*name="name"[\s\S]*name="email"[\s\S]*name="comment"/);
+  assert.ok(page.indexOf('class="column-reactions"') < page.indexOf('class="column-response"'));
+  assert.ok(page.indexOf('class="column-response"') < page.indexOf('No comments yet.'));
   const post = (url, values, headers = {}) => fetch(base + url, {
     method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie: reader, ...headers },
     body: new URLSearchParams({ _reader: token, lang: 'en', ...values }),
@@ -377,6 +382,8 @@ test('article likes and comments require verification and admin moderation', asy
   assert.equal((await approve(adminToken, 'https://other.example')).status, 403);
   assert.equal((await approve(adminToken)).status, 302);
   html = await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text();
+  assert.match(html, /<ol class="column-comments">/);
+  assert.ok(html.indexOf('class="column-response"') < html.indexOf('<ol class="column-comments">'));
   assert.match(html, /&lt;Reader&gt;/);
   assert.match(html, /&lt;script&gt;hello&lt;\/script&gt;/);
   assert.doesNotMatch(html, /private@example\.com|<script>hello/);
