@@ -9,9 +9,10 @@ import { createStore } from './lib/store.js';
 import { createAdmins } from './lib/admins.js';
 import { mountAdminAuth } from './lib/admin-routes.js';
 import { mountGallery } from './lib/gallery-routes.js';
+import { mountColumns } from './lib/column-routes.js';
 import * as view from './lib/render.js';
 import { formatScriptureReference } from './lib/scripture-links.js';
-import { SERMON_SERVICE_FILTERS, sermonServiceType, splitBilingual } from './lib/sermon-metadata.js';
+import { findSermonByKey, SERMON_SERVICE_FILTERS, sermonDateSlug, sermonRouteKey, sermonServiceType, sermonSlugConflict, splitBilingual } from './lib/sermon-metadata.js';
 import { createSermonPreviewRenderer, sermonPreviewVersion } from './lib/sermon-preview.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -60,6 +61,9 @@ const speakerFields = (body) => {
   return { speaker: [en, ko].filter(Boolean).join('\n'), speakerEn: en, speakerKo: ko };
 };
 const removeFiles = (dir, names) => Promise.all(names.map((n) => fs.rm(path.join(dir, n), { force: true })));
+
+class SermonUrlConflict extends Error {}
+class StagedSermonUnavailable extends Error {}
 
 export function createApp({
   dataDir = process.env.ICA_DATA_DIR || path.join(root, 'data'),
@@ -148,16 +152,23 @@ export function createApp({
         body: view.messagePage({ title: 'Please choose a listed service. · 목록에서 예배를 선택해 주세요.', text: '' }),
       }));
     }
-    const sermons = sortSermons(await store.read('sermons'))
-      .filter((sermon) => !service || sermonServiceType(sermon.service) === service);
+    const allSermons = await store.read('sermons');
+    const sermons = sortSermons(allSermons)
+      .filter((sermon) => !service || sermonServiceType(sermon.service) === service)
+      .map((sermon) => ({ ...sermon, urlKey: sermonRouteKey(sermon, allSermons) }));
     const admin = auth.isAdmin(req);
     page(req, res, { title: 'Sermons', active: 'sermons', body: view.sermonsPage({ ...(({ items, ...p }) => ({ sermons: items, pager: p }))(paginate(sermons, req, SERMONS_PER_PAGE)), service, admin, pastors: admin ? await readPastors() : [], csrfToken: admin ? auth.csrfToken(req) : '' }) });
   });
 
   app.get('/sermons/:id/preview.png', async (req, res, next) => {
     try {
-      const sermon = (await store.read('sermons')).find((item) => item.id === req.params.id);
+      const sermons = await store.read('sermons');
+      const sermon = findSermonByKey(sermons, req.params.id);
       if (!sermon) return res.status(404).type('text').send('Sermon not found. 설교를 찾을 수 없습니다.');
+      const key = sermonRouteKey(sermon, sermons);
+      if (key !== req.params.id) {
+        return res.redirect(301, `/sermons/${encodeURIComponent(key)}/preview.png${new URL(req.originalUrl, 'http://localhost').search}`);
+      }
       res.set({
         'Cache-Control': 'public, max-age=0, must-revalidate',
         ETag: `"${sermonPreviewVersion(sermon)}"`,
@@ -169,8 +180,10 @@ export function createApp({
     }
   });
 
-  app.get('/sermons/:id', async (req, res) => {
-    const sermon = (await store.read('sermons')).find((item) => item.id === req.params.id);
+  app.get('/sermons/:id', (req, res, next) => {
+    (async () => {
+    const sermons = await store.read('sermons');
+    const sermon = findSermonByKey(sermons, req.params.id);
     if (!sermon) {
       return res.status(404).send(renderPage(req, {
         title: 'Not found', admin: auth.isAdmin(req),
@@ -178,17 +191,22 @@ export function createApp({
         body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }),
       }));
     }
+    const key = sermonRouteKey(sermon, sermons);
+    if (key !== req.params.id) {
+      return res.redirect(301, `/sermons/${encodeURIComponent(key)}${new URL(req.originalUrl, 'http://localhost').search}`);
+    }
     const admin = auth.isAdmin(req);
     page(req, res, {
       title: sermon.title, active: 'sermons',
       description: sermon.scripture ? formatScriptureReference(sermon.scripture) : 'Listen to this sermon. 설교를 들어 보세요.',
-      previewImage: `https://immanuelchurchofamerica.org/sermons/${encodeURIComponent(sermon.id)}/preview.png?v=${sermonPreviewVersion(sermon)}`,
+      previewImage: `https://immanuelchurchofamerica.org/sermons/${encodeURIComponent(key)}/preview.png?v=${sermonPreviewVersion(sermon)}`,
       previewImageAlt: [sermon.title, formatScriptureReference(sermon.scripture), sermon.date, sermon.service].filter(Boolean).join(' · '),
       body: view.sermonsPage({
-        sermons: [sermon], pager: { current: 1, pages: 1 }, single: true,
+        sermons: [{ ...sermon, urlKey: key }], pager: { current: 1, pages: 1 }, single: true,
         admin, pastors: admin ? await readPastors() : [], csrfToken: admin ? auth.csrfToken(req) : '',
       }),
     });
+    })().catch(next);
   });
 
   app.get('/admin/login', (req, res) => {
@@ -204,17 +222,25 @@ export function createApp({
 
   const adminView = async (req, res, status = 200, extra = {}) => {
     const sermons = await store.read('sermons');
+    const columns = await store.read('columns');
+    const section = req.path === '/admin/sermons' ? 'sermons' : req.path === '/admin/columns' ? 'columns' : 'home';
+    const columnIds = new Set(columns.map((column) => column.id));
+    const pendingComments = section === 'sermons' ? 0 : (await store.read('column-engagement'))
+      .filter((record) => columnIds.has(record.id))
+      .reduce((count, record) => count + record.comments.filter((comment) => !comment.approved).length, 0);
     if (auth.isOwner(req)) extra = { ...extra, admins: await admins.list() };
     res.set('Cache-Control', 'no-store');
     res.status(status).send(renderPage(req, {
       title: 'Admin', active: 'admin', admin: true,
-      body: view.adminPage({ sermons, pastors: await readPastors(), csrfToken: auth.csrfToken(req), ...extra }),
+      body: view.adminPage({ sermons, columns, section, pendingComments, pastors: await readPastors(), csrfToken: auth.csrfToken(req), ...extra }),
     }));
   };
 
   mountAdminAuth({ app, admins, loginLimiter, adminView, ownerPassword: password });
 
-  app.get('/admin', auth.requireAdmin, (req, res) => adminView(req, res, 200, { notice: req.query.notice }));
+  app.get('/admin', auth.requireAdmin, (req, res, next) => adminView(req, res, 200, { notice: req.query.notice }).catch(next));
+  app.get('/admin/sermons', auth.requireAdmin, (req, res, next) => adminView(req, res, 200, { notice: req.query.notice }).catch(next));
+  app.get('/admin/columns', auth.requireAdmin, (req, res, next) => adminView(req, res).catch(next));
 
   app.post('/admin/pastors', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, (req, res, next) => {
     (async () => {
@@ -246,6 +272,7 @@ export function createApp({
   });
 
   mountGallery({ app, store, uploadDir, page, renderPage });
+  mountColumns({ app, store, uploadDir, page, renderPage, readPastors });
 
   // Wrap multer so upload errors (size, type) render a friendly message.
   const handleUpload = (mw) => (req, res, next) =>
@@ -332,15 +359,24 @@ export function createApp({
     auth.requireSameOrigin,
     handleUpload(uploader(audioDir, AUDIO, 'audio/', 1).single('audio')),
     csrfAfterUpload(audioDir),
-    async (req, res) => {
+    (req, res, next) => {
+      (async () => {
       const title = clean(req.body.title, 140);
       if (!title) {
         if (req.file) await removeFiles(audioDir, [req.file.filename]);
         return adminView(req, res, 400, { error: 'A title is required.' });
       }
+      const date = typeof req.body.date === 'string' ? req.body.date : '';
+      const service = typeof req.body.service === 'string' ? clean(req.body.service, 100) : '';
+      const slug = sermonDateSlug(date, service);
+      if (!slug) {
+        if (req.file) await removeFiles(audioDir, [req.file.filename]);
+        return adminView(req, res, 400, { error: { en: 'A valid date and service are required.', ko: '올바른 날짜와 예배를 선택해 주세요.' } });
+      }
       let filename = req.file?.filename;
+      let staged;
       if (!filename && typeof req.body.stagedAudio === 'string') {
-        const staged = stagedUploads.get(req.body.stagedAudio);
+        staged = stagedUploads.get(req.body.stagedAudio);
         const sessionId = auth.sessionInfo(req)?.id;
         if (!staged || staged.sessionId !== sessionId || staged.expiresAt <= Date.now()) {
           if (staged && staged.expiresAt <= Date.now()) {
@@ -350,18 +386,39 @@ export function createApp({
           return adminView(req, res, 400, { error: 'The audio upload expired. Please select it again.' });
         }
         filename = req.body.stagedAudio;
-        await fs.rename(path.join(stagingDir, filename), path.join(audioDir, filename));
-        stagedUploads.delete(filename);
       }
       if (!filename) return adminView(req, res, 400, { error: 'An audio file is required.' });
-      const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date ?? '') ? req.body.date : '';
-      await store.update('sermons', (list) => [...list, {
-        id: crypto.randomUUID(), title, date,
-        ...speakerFields(req.body), service: clean(req.body.service, 100), scripture: clean(req.body.scripture, 1000),
-        description: clean(req.body.description, 10000),
-        file: filename, createdAt: new Date().toISOString(),
-      }]);
-      res.redirect('/admin?notice=' + encodeURIComponent('Sermon uploaded.'));
+      let moved = false;
+      try {
+        await store.update('sermons', async (list) => {
+          if (sermonSlugConflict(list, slug)) throw new SermonUrlConflict();
+          if (staged) {
+            if (stagedUploads.get(filename) !== staged || staged.expiresAt <= Date.now()) throw new StagedSermonUnavailable();
+            await fs.rename(path.join(stagingDir, filename), path.join(audioDir, filename));
+            moved = true;
+            stagedUploads.delete(filename);
+          }
+          return [...list, {
+            id: crypto.randomUUID(), slug, title, date,
+            ...speakerFields(req.body), service, scripture: clean(req.body.scripture, 1000),
+            description: clean(req.body.description, 10000),
+            file: filename, createdAt: new Date().toISOString(),
+          }];
+        });
+      } catch (error) {
+        if (moved) {
+          await fs.rename(path.join(audioDir, filename), path.join(stagingDir, filename));
+          stagedUploads.set(filename, staged);
+        }
+        if (req.file) await removeFiles(audioDir, [req.file.filename]);
+        if (error instanceof SermonUrlConflict) {
+          return adminView(req, res, 409, { error: { en: 'A sermon already uses that date and service URL.', ko: '해당 날짜와 예배의 설교 주소가 이미 사용 중입니다.' } });
+        }
+        if (error instanceof StagedSermonUnavailable) return adminView(req, res, 400, { error: 'The audio upload expired. Please select it again.' });
+        throw error;
+      }
+      res.redirect('/admin/sermons?notice=' + encodeURIComponent('Sermon uploaded.'));
+      })().catch(next);
     });
 
   app.post('/admin/sermons/:id/audio', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, (req, res, next) => {
@@ -389,8 +446,9 @@ export function createApp({
       await fs.rename(path.join(stagingDir, filename), path.join(audioDir, filename));
       stagedUploads.delete(filename);
       let found = false;
+      let updatedSermons;
       try {
-        await store.update('sermons', (list) => list.map((sermon) => {
+        updatedSermons = await store.update('sermons', (list) => list.map((sermon) => {
           if (sermon.id !== req.params.id) return sermon;
           found = true;
           return { ...sermon, file: filename };
@@ -407,28 +465,48 @@ export function createApp({
         }));
       }
       await removeFiles(audioDir, [current.file]);
-      res.redirect(`/sermons/${encodeURIComponent(req.params.id)}`);
+      const updated = updatedSermons.find((sermon) => sermon.id === req.params.id);
+      res.redirect(`/sermons/${encodeURIComponent(sermonRouteKey(updated, updatedSermons))}`);
     })().catch(next);
   });
 
-  app.post('/admin/sermons/:id/edit', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, async (req, res) => {
+  app.post('/admin/sermons/:id/edit', auth.requireAdmin, auth.requireSameOrigin, auth.requireCsrf, (req, res, next) => {
+    (async () => {
     const title = clean(req.body.title, 140);
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date ?? '') ? req.body.date : '';
+    const date = typeof req.body.date === 'string' ? req.body.date : '';
+    const service = typeof req.body.service === 'string' ? clean(req.body.service, 100) : '';
+    const slug = sermonDateSlug(date, service);
     let found = false;
-    const next = await store.update('sermons', (list) => list.map((s) => {
-      if (s.id !== req.params.id || !title) return s;
-      found = true;
-      return {
-        ...s, title, date,
-        ...speakerFields(req.body), service: clean(req.body.service, 100), scripture: clean(req.body.scripture, 1000),
-        description: clean(req.body.description, 10000),
-      };
-    }));
-    if (!found) return res.status(next.some((s) => s.id === req.params.id) ? 400 : 404).send(renderPage(req, { title: 'Not found', admin: true, body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }) }));
+    let updated;
+    try {
+      updated = await store.update('sermons', (list) => list.map((s) => {
+        if (s.id !== req.params.id) return s;
+        found = true;
+        if (!title || !slug) return s;
+        if (sermonSlugConflict(list, slug, s.id)) throw new SermonUrlConflict();
+        const previous = sermonRouteKey(s, list);
+        const aliases = new Set(s.slugAliases ?? []);
+        if (previous !== s.id && previous !== slug) aliases.add(previous);
+        aliases.delete(slug);
+        return {
+          ...s, slug, slugAliases: [...aliases], title, date,
+          ...speakerFields(req.body), service, scripture: clean(req.body.scripture, 1000),
+          description: clean(req.body.description, 10000),
+        };
+      }));
+    } catch (error) {
+      if (!(error instanceof SermonUrlConflict)) throw error;
+      return res.status(409).send(renderPage(req, { title: 'Error', admin: true,
+        body: view.messagePage({ title: 'Sermon URL already in use · 설교 주소가 이미 사용 중입니다', text: 'Choose a different date or service. · 다른 날짜 또는 예배를 선택해 주세요.' }) }));
+    }
+    if (!found) return res.status(404).send(renderPage(req, { title: 'Not found', admin: true, body: view.messagePage({ title: 'Page not found', text: 'We could not find that page, but you are always welcome here.' }) }));
+    if (!title || !slug) return res.status(400).send(renderPage(req, { title: 'Error', admin: true,
+      body: view.messagePage({ title: 'Title, date, and service are required · 제목, 날짜와 예배가 필요합니다', text: 'Enter a title and valid date and choose a service. · 제목과 올바른 날짜를 입력하고 예배를 선택해 주세요.' }) }));
     // The list sorts by date, so send the admin to the page where the sermon now sits.
-    const index = sortSermons(next).findIndex((s) => s.id === req.params.id);
+    const index = sortSermons(updated).findIndex((s) => s.id === req.params.id);
     const pageNo = Math.floor(index / SERMONS_PER_PAGE) + 1;
     res.redirect(`/sermons${pageNo > 1 ? `?page=${pageNo}` : ''}#sermon-${req.params.id}`);
+    })().catch(next);
   });
 
   const remove = (name, dir, back) => async (req, res) => {
