@@ -498,6 +498,10 @@ main:has(> .gallery-viewer) .page-num, main:has(> .gallery-viewer) .page-step { 
 .sermon audio { margin-top: .4rem; border-radius: 2rem; }
 .sermon-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
 .sermon-action { font-size: .85rem; letter-spacing: .04em; }
+.sermon-actions .sermon-action { border-radius: 999px; }
+.sermon-actions .sermon-action::before { border-radius: calc(999px - var(--rim)); }
+.sermon-actions .share-link { --fill: linear-gradient(135deg, var(--pink), var(--lavender)); }
+.sermon-actions .copy-link { --fill: linear-gradient(135deg, var(--yellow), var(--blue)); }
 .sermon-action .bilingual { flex-direction: row; flex-wrap: wrap; gap: .25em .6em; align-items: baseline; }
 .meta { margin: 0 0 .5rem; color: var(--muted); font-size: .95rem; }
 .scripture { font: 1.05rem var(--serif); color: var(--deep-teal); margin: 0 0 .5rem; }
@@ -688,7 +692,8 @@ input:focus, textarea:focus, select:focus { outline: 3px solid rgba(63,127,166,.
 }
 @media (max-width: 560px) {
   body { font-size: 16px; }
-  .column-card-link.has-image { grid-template-columns: minmax(0, 1fr) minmax(84px, 28%); gap: .9rem; }
+  .column-card-link.has-image { grid-template-columns: minmax(0, 1fr); gap: .9rem; }
+  .column-card-image { order: 0; }
   .column-card h2 { font-size: 1.5rem; }
   .column-language p, .column-rich { font-size: 1.05rem; line-height: 1.75; }
 }

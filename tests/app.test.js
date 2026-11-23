@@ -183,7 +183,8 @@ test('pastors publish bilingual columns with escaped text, an image, video, and 
   assert.match(source, /\.column-card-link:focus-visible\s*\{[^}]*outline:/);
   assert.match(source, /\.column-card-link\.has-image\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(120px, 25%\)/);
   assert.match(source, /@media \(max-width: 560px\)/);
-  assert.match(source, /\.column-card-link\.has-image \{ grid-template-columns: minmax\(0, 1fr\) minmax\(84px, 28%\)/);
+  assert.match(source, /\.column-card-link\.has-image \{ grid-template-columns: minmax\(0, 1fr\); gap: \.9rem; \}/);
+  assert.match(source, /\.column-card-image \{ order: 0; \}/);
   assert.match(source, /\.column-card-image\s*\{[^}]*order:\s*2/);
   assert.match(source, /\.columns-page \.page-head, \.column-card, \.column-article, \.column-feature, \.column-video-link,[\s\S]*?border-radius: var\(--radius\)/);
   assert.match(source, /\.column-reading\s*\{[^}]*max-width:\s*47rem/s);
@@ -1802,6 +1803,11 @@ test('sermons can be shared with the native share sheet or copied as a link', as
   assert.match(html, /class="btn btn-ghost sermon-action copy-link" href="\/sermons\/share-id"/);
   assert.match(html, /class="btn btn-ghost sermon-action share-link"[\s\S]*Share sermon[\s\S]*설교 공유/);
   assert.match(html, /class="btn btn-ghost sermon-action copy-link"[\s\S]*Copy link[\s\S]*링크 복사/);
+  const styles = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  assert.match(styles, /\.sermon-actions \.sermon-action \{ border-radius: 999px; \}/);
+  assert.match(styles, /\.sermon-actions \.sermon-action::before \{ border-radius: calc\(999px - var\(--rim\)\); \}/);
+  assert.match(styles, /\.sermon-actions \.share-link \{ --fill: linear-gradient\(135deg, var\(--pink\), var\(--lavender\)\); \}/);
+  assert.match(styles, /\.sermon-actions \.copy-link \{ --fill: linear-gradient\(135deg, var\(--yellow\), var\(--blue\)\); \}/);
   const detailResponse = await fetch(`${base}/sermons/share-id`);
   assert.equal(detailResponse.status, 200);
   const detailHtml = await detailResponse.text();
