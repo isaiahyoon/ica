@@ -530,6 +530,46 @@ test('article storage failures return an error response', async (t) => {
 });
 
 for (const viewport of ['desktop', 'mobile']) {
+  test(`liking an article keeps the ${viewport} page in place`, async () => {
+    const source = await fs.readFile(new URL('../public/scripts/column-comment.js', import.meta.url), 'utf8');
+    const status = { textContent: '' };
+    const label = { children: [{ textContent: 'Like' }, { textContent: '좋아요' }] };
+    const count = { textContent: '4' };
+    const button = {
+      disabled: false,
+      querySelector: (selector) => selector === '.bilingual' ? label : count,
+    };
+    let submit;
+    const form = {
+      action: 'https://example.com/columns/rest/like',
+      querySelector: (selector) => selector === '[data-like-status]' ? status : button,
+      addEventListener: (_name, handler) => { submit = handler; },
+    };
+    const window = { location: { origin: 'https://example.com', href: 'https://example.com/columns/rest?lang=en#article-body' } };
+    let request;
+    runInNewContext(source, {
+      document: { querySelector: (selector) => selector === '.column-comment-form' ? {
+        querySelector: () => ({ textContent: '', disabled: false }),
+        addEventListener() {},
+      } : form },
+      window, URL, URLSearchParams,
+      FormData: class { *[Symbol.iterator]() { yield ['_reader', 'token']; } },
+      fetch: async (_url, options) => {
+        request = options;
+        return { ok: true, redirected: true, url: 'https://example.com/columns/rest?lang=en&status=liked#article-engagement' };
+      },
+    });
+    let prevented = false;
+    await submit({ preventDefault() { prevented = true; } });
+    assert.equal(prevented, true);
+    assert.equal(request.method, 'POST');
+    assert.equal(request.credentials, 'same-origin');
+    assert.equal(window.location.href, 'https://example.com/columns/rest?lang=en#article-body');
+    assert.equal(button.disabled, true);
+    assert.deepEqual(label.children.map((child) => child.textContent), ['Liked', '좋아요 완료']);
+    assert.equal(count.textContent, '5');
+  });
+
   test(`comment submission keeps the ${viewport} page in place and preserves input on failure`, async () => {
     const source = await fs.readFile(new URL('../public/scripts/column-comment.js', import.meta.url), 'utf8');
     const status = { textContent: '' };
