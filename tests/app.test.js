@@ -73,21 +73,24 @@ test('pastor list is persistent and removal leaves saved sermons unchanged', asy
 test('admin dashboard links to separate content management pages', async (t) => {
   const { base, close } = await boot();
   t.after(close);
-  for (const route of ['/admin/sermons', '/admin/columns', '/admin/gallery']) {
+  for (const route of ['/admin/sermons', '/admin/articles', '/admin/gallery']) {
     assert.equal((await fetch(base + route, { redirect: 'manual' })).status, 302);
   }
+  const legacy = await fetch(`${base}/admin/columns?status=pending`, { redirect: 'manual' });
+  assert.equal(legacy.status, 301);
+  assert.equal(legacy.headers.get('location'), '/admin/articles?status=pending');
   const cookie = await login(base);
   const dashboard = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
-  for (const route of ['/admin/sermons', '/admin/columns', '/admin/gallery']) {
+  for (const route of ['/admin/sermons', '/admin/articles', '/admin/gallery']) {
     assert.ok(dashboard.includes(`href="${route}"`));
   }
-  assert.doesNotMatch(dashboard, /id="sermon-upload-form"|href="\/admin\/columns\/new"/);
+  assert.doesNotMatch(dashboard, /id="sermon-upload-form"|href="\/admin\/articles\/new"/);
   const sermons = await (await fetch(`${base}/admin/sermons`, { headers: { cookie } })).text();
   assert.match(sermons, /id="sermon-upload-form"/);
   assert.match(sermons, /href="\/admin"/);
-  const columns = await (await fetch(`${base}/admin/columns`, { headers: { cookie } })).text();
-  assert.match(columns, /href="\/admin\/columns\/new"/);
-  assert.match(columns, /href="\/admin\/columns\/comments"/);
+  const columns = await (await fetch(`${base}/admin/articles`, { headers: { cookie } })).text();
+  assert.match(columns, /href="\/admin\/articles\/new"/);
+  assert.match(columns, /href="\/admin\/articles\/comments"/);
   assert.doesNotMatch(columns, /id="sermon-upload-form"/);
 });
 
@@ -130,7 +133,7 @@ test('pastors publish bilingual columns with escaped text, an image, video, and 
     body,
   });
   assert.equal(published.status, 302);
-  assert.equal(published.headers.get('location'), '/columns');
+  assert.equal(published.headers.get('location'), '/articles');
 
   const textOnly = new FormData();
   textOnly.set('_csrf', token);
@@ -144,15 +147,15 @@ test('pastors publish bilingual columns with escaped text, an image, video, and 
   assert.match(list, /Lorem &lt;Ipsum&gt;/);
   assert.match(list, /아보트 공부/);
   assert.match(list, /A short &lt;preview&gt;/);
-  assert.match(list, /columns\/lorem-ipsum/);
+  assert.match(list, /articles\/lorem-ipsum/);
   const cards = [...list.matchAll(/<article class="column-card"[\s\S]*?<\/article>/g)].map((match) => match[0]);
   assert.equal(cards.length, 2);
-  const imageCard = cards.find((card) => card.includes('/columns/lorem-ipsum'));
-  const textCard = cards.find((card) => card.includes('/columns/a-text-only-article'));
+  const imageCard = cards.find((card) => card.includes('/articles/lorem-ipsum'));
+  const textCard = cards.find((card) => card.includes('/articles/a-text-only-article'));
   for (const card of [imageCard, textCard]) {
     assert.ok(card);
     assert.equal((card.match(/<a /g) || []).length, 1);
-    assert.match(card, /<a class="column-card-link(?: has-image)?" href="\/columns\/[^"]+" aria-labelledby="[^"]+">[\s\S]*<h2[^>]*>[\s\S]*<\/h2>[\s\S]*<\/a>/);
+    assert.match(card, /<a class="column-card-link(?: has-image)?" href="\/articles\/[^"]+" aria-labelledby="[^"]+">[\s\S]*<h2[^>]*>[\s\S]*<\/h2>[\s\S]*<\/a>/);
     assert.doesNotMatch(card, /<button|Read article|기사 읽기/);
   }
   assert.match(imageCard, /class="column-card-link has-image"[\s\S]*<img[^>]+alt=""/);
@@ -167,7 +170,7 @@ test('pastors publish bilingual columns with escaped text, an image, video, and 
   assert.match(article, /첫 번째 한국어 문단입니다/);
   assert.doesNotMatch(article, /Lorem <Ipsum>/);
   assert.match(article, /href="https:\/\/www\.youtube\.com\/watch\?v=example"/);
-  assert.match(article, /class="column-back" href="\/columns"/);
+  assert.match(article, /class="column-back" href="\/articles"/);
   assert.match(article, /<h1>Lorem &lt;Ipsum&gt;<\/h1>/);
   assert.match(article, /<time datetime="2026-11-22">/);
   assert.match(article, /class="column-feature"[\s\S]*<img[^>]*alt="Lorem &lt;Ipsum&gt;"/);
@@ -201,13 +204,16 @@ test('visual article editing preserves links and safely publishes inline images'
   t.after(close);
   const cookie = await login(base);
   const token = await csrfToken(base, cookie);
-  const editor = await fetch(`${base}/admin/columns/new`, { headers: { cookie } });
+  const editor = await fetch(`${base}/admin/articles/new`, { headers: { cookie } });
   assert.equal(editor.status, 200);
   const editorHtml = await editor.text();
-  assert.match(editorHtml, /data-column-surface[\s\S]*data-insert-image[\s\S]*data-insert-link|data-column-surface[\s\S]*data-insert-link[\s\S]*data-insert-image/);
+  assert.match(editorHtml, /column-formatting[\s\S]*data-column-surface/);
+  assert.match(editorHtml, /data-insert-image[\s\S]*data-insert-link|data-insert-link[\s\S]*data-insert-image/);
   assert.match(editorHtml, /data-pastor-select[\s\S]*Pastor John Yoon[\s\S]*윤태선 목사/);
   assert.equal((editorHtml.match(/data-format="(?:bold|italic|underline)"/g) || []).length, 6);
-  assert.equal((await fetch(`${base}/admin/columns/new`, { redirect: 'manual' })).status, 302);
+  assert.equal((editorHtml.match(/<kbd aria-hidden="true">⌘[BIU]<\/kbd>/g) || []).length, 6);
+  assert.equal((editorHtml.match(/aria-keyshortcuts="Meta\+[BIU] Control\+[BIU]"/g) || []).length, 6);
+  assert.equal((await fetch(`${base}/admin/articles/new`, { redirect: 'manual' })).status, 302);
 
   const imageId = 'c65c7e29-b623-40cf-9c2c-6e59f214057a';
   const image = await sharp({ create: { width: 20, height: 20, channels: 3, background: '#223b55' } }).png().toBuffer();
@@ -251,20 +257,20 @@ test('visual article editing preserves links and safely publishes inline images'
   const created = await post('/admin/columns/rich', create);
   assert.equal(created.status, 200);
   const location = (await created.json()).location;
-  assert.equal(location, '/columns/an-article');
+  assert.equal(location, '/articles/an-article');
   let saved = JSON.parse(await fs.readFile(path.join(dataDir, 'columns.json'), 'utf8'))[0];
   assert.equal(saved.inlineImages.length, 1);
   const inlineImage = saved.inlineImages[0];
   const cover = saved.image;
   const publicPage = await (await fetch(base + location)).text();
   assert.match(publicPage, /<a href="https:\/\/example\.com\/watch\?a=1&amp;b=2"/);
-  assert.match(publicPage, /<img src="\/columns\/images\/[^"]+" data-column-image="[^"]+" alt="A church photo"/);
+  assert.match(publicPage, /<img src="\/articles\/images\/[^"]+" data-column-image="[^"]+" alt="A church photo"/);
   assert.match(publicPage, /Then more text\./);
   assert.match(publicPage, /<strong>Bold &amp; <em>&lt;italic&gt;<\/em><\/strong><u>Underlined<\/u>/);
   assert.doesNotMatch(publicPage, /class="column-byline"><img/);
   assert.equal((await fetch(`${base}/columns/images/${inlineImage}`)).status, 200);
 
-  const editPage = await (await fetch(`${base}/admin/columns/${saved.id}/edit`, { headers: { cookie } })).text();
+  const editPage = await (await fetch(`${base}/admin/articles/${saved.id}/edit`, { headers: { cookie } })).text();
   const revision = editPage.match(/name="revision" value="([^"]+)"/)[1];
   assert.match(editPage, /data-column-image="/);
   assert.match(editPage, /<strong>Bold &amp; <em>&lt;italic&gt;<\/em><\/strong><u>Underlined<\/u>/);
@@ -311,18 +317,26 @@ test('article language links and previews follow the shared language and author'
   assert.match(ko, /한국어 본문/);
   assert.doesNotMatch(ko, /English body/);
   assert.match(ko, /윤태선 목사/);
-  assert.match(ko, /property="og:url" content="https:\/\/immanuelchurchofamerica.org\/columns\/rest\?lang=ko"/);
-  assert.match(ko, /property="og:image" content="[^"]+\/columns\/rest\/preview\.png\?lang=ko&amp;v=[a-f0-9]+"/);
+  assert.match(ko, /property="og:title" content="쉼의 자리 · Immanuel Church of America · 미주 임마누엘 교회"/);
+  assert.match(ko, /property="og:description" content="윤태선 목사 · 2026년 11월 22일"/);
+  assert.match(ko, /property="og:url" content="https:\/\/immanuelchurchofamerica.org\/articles\/rest\?lang=ko"/);
+  assert.match(ko, /property="og:image" content="[^"]+\/articles\/rest\/preview\.png\?lang=ko&amp;v=[a-f0-9]+"/);
   assert.match(ko, /property="og:image:alt" content="쉼의 자리 · 윤태선 목사 · /);
+  const koreanArticleActions = ko.match(/<nav class="column-footer"[\s\S]*?<\/nav>/)[0];
+  assert.match(koreanArticleActions, /column-action-share share-link[^>]*href="\/articles\/rest\?lang=ko" data-share-title="쉼의 자리"/);
+  assert.match(koreanArticleActions, /column-action-copy copy-link[^>]*href="\/articles\/rest\?lang=ko"/);
   const articleActions = en.match(/<nav class="column-footer"[\s\S]*?<\/nav>/)[0];
   assert.equal((articleActions.match(/class="btn btn-ghost column-action/g) || []).length, 3);
-  assert.match(articleActions, /column-action-all[^>]*href="\/columns"/);
-  assert.match(articleActions, /column-action-share share-link[^>]*href="\/columns\/rest" data-share-title="A place of rest"/);
-  assert.match(articleActions, /column-action-copy copy-link[^>]*href="\/columns\/rest"/);
+  assert.match(articleActions, /column-action-all[^>]*href="\/articles"/);
+  assert.match(articleActions, /column-action-share share-link[^>]*href="\/articles\/rest\?lang=en" data-share-title="A place of rest"/);
+  assert.match(articleActions, /column-action-copy copy-link[^>]*href="\/articles\/rest\?lang=en"/);
   assert.match(en, /<script src="\/scripts\/sermon-sharing\.js" defer><\/script>/);
   assert.match(ko, /data-share-title="쉼의 자리"/);
   assert.match(ko, /href="\?lang=en"/);
-  const fallback = await (await fetch(`${base}/columns/rest`)).text();
+  const legacyArticle = await fetch(`${base}/columns/rest?lang=ko`, { redirect: 'manual' });
+  assert.equal(legacyArticle.status, 301);
+  assert.equal(legacyArticle.headers.get('location'), '/articles/rest?lang=ko');
+  const fallback = await (await fetch(`${base}/articles/rest`)).text();
   assert.match(fallback, /English body/);
   assert.match(fallback, /한국어 본문/);
   const preview = await fetch(`${base}/columns/rest/preview.png?lang=ko`);
@@ -347,10 +361,10 @@ test('article language preference preserves explicit links', async () => {
     });
     return destination;
   };
-  assert.equal(execute('https://example.com/columns/rest', ['fr', 'ko-KR']), 'https://example.com/columns/rest?lang=ko');
-  assert.equal(execute('https://example.com/columns/rest', ['fr']), 'https://example.com/columns/rest?lang=en');
-  assert.equal(execute('https://example.com/columns/rest', [], 'ko-KR'), 'https://example.com/columns/rest?lang=ko');
-  assert.equal(execute('https://example.com/columns/rest?lang=en', ['ko']), '');
+  assert.equal(execute('https://example.com/articles/rest', ['fr', 'ko-KR']), 'https://example.com/articles/rest?lang=ko');
+  assert.equal(execute('https://example.com/articles/rest', ['fr']), 'https://example.com/articles/rest?lang=en');
+  assert.equal(execute('https://example.com/articles/rest', [], 'ko-KR'), 'https://example.com/articles/rest?lang=ko');
+  assert.equal(execute('https://example.com/articles/rest?lang=en', ['ko']), '');
 });
 
 for (const viewport of ['desktop', 'mobile']) {
@@ -359,6 +373,9 @@ for (const viewport of ['desktop', 'mobile']) {
     const handlers = new Map();
     const commands = [];
     const fields = new Map();
+    const focusOptions = [];
+    let scrollX = 12;
+    let scrollY = viewport === 'desktop' ? 640 : 420;
     const text = { nodeType: 3, data: 'Word' };
     const underline = { nodeType: 1, tagName: 'U', childNodes: [text] };
     const italic = { nodeType: 1, tagName: 'I', childNodes: [underline] };
@@ -369,8 +386,14 @@ for (const viewport of ['desktop', 'mobile']) {
     const buttons = ['bold', 'italic', 'underline'].map(button);
     const status = { textContent: '' };
     const submit = {};
+    const rootStyle = { scrollBehavior: 'smooth' };
     function section(language, children) {
-      const surface = { childNodes: children, hidden: true, contains: () => true, focus() {}, addEventListener() {}, closest: () => wrapper };
+      const surface = {
+        childNodes: children, hidden: true, contains: () => true,
+        focus(options) { focusOptions.push(options); },
+        addEventListener: (name, fn) => handlers.set(`surface:${language}:${name}`, fn),
+        closest: () => wrapper,
+      };
       const wrapper = {
         dataset: { columnLanguage: language },
         querySelector: (selector) => ({
@@ -389,10 +412,22 @@ for (const viewport of ['desktop', 'mobile']) {
     };
     const document = {
       querySelector: () => form, addEventListener: (name, fn) => handlers.set(`document:${name}`, fn),
-      execCommand: (command) => { commands.push(command); return true; },
+      documentElement: { style: rootStyle },
+      execCommand: (command) => { commands.push(command); scrollY = 0; return true; },
+    };
+    const window = {
+      get scrollX() { return scrollX; },
+      get scrollY() { return scrollY; },
+      getSelection: () => selection,
+      scrollTo(x, y) {
+        assert.equal(rootStyle.scrollBehavior, 'auto');
+        scrollX = x;
+        scrollY = y;
+      },
+      addEventListener() {},
     };
     const context = {
-      document, window: { getSelection: () => selection, addEventListener() {} }, Node: { TEXT_NODE: 3, ELEMENT_NODE: 1 },
+      document, window, Node: { TEXT_NODE: 3, ELEMENT_NODE: 1 },
       FormData: class { set(key, value) { fields.set(key, value); } get() { return 'token'; } },
       fetch: async () => ({ ok: false, headers: { get: () => 'application/json' }, json: async () => ({ error: 'Test failure' }) }),
       Map, Set,
@@ -405,7 +440,20 @@ for (const viewport of ['desktop', 'mobile']) {
       assert.equal(prevented, true);
       handlers.get(`${format}:click`)();
     }
-    assert.deepEqual(commands, ['bold', 'italic', 'underline']);
+    for (const [key, format] of [['b', 'bold'], ['i', 'italic'], ['u', 'underline']]) {
+      let prevented = false;
+      handlers.get('surface:en:keydown')({
+        key: key.toUpperCase(), metaKey: true, ctrlKey: false, altKey: false, isComposing: false,
+        preventDefault() { prevented = true; },
+      });
+      assert.equal(prevented, true);
+      assert.equal(commands.at(-1), format);
+    }
+    assert.deepEqual(commands, ['bold', 'italic', 'underline', 'bold', 'italic', 'underline']);
+    assert.equal(scrollX, 12);
+    assert.equal(scrollY, viewport === 'desktop' ? 640 : 420);
+    assert.equal(rootStyle.scrollBehavior, 'smooth');
+    assert.ok(focusOptions.every((options) => options.preventScroll));
     await handlers.get('form:submit')({ preventDefault() {} });
     assert.deepEqual(JSON.parse(fields.get('bodyEnDoc')), [{ type: 'bold', children: [{ type: 'italic', children: [{ type: 'underline', children: [{ type: 'text', text: 'Word' }] }] }] }]);
   });
@@ -443,14 +491,14 @@ test('article likes and comments require verification and admin moderation', asy
   assert.doesNotMatch(html, /private@example\.com|&lt;script&gt;hello/);
   const adminCookie = await login(base);
   const adminToken = await csrfToken(base, adminCookie);
-  for (const route of ['/admin', '/admin/columns']) {
+  for (const route of ['/admin', '/admin/articles']) {
     const dashboard = await (await fetch(base + route, { headers: { cookie: adminCookie } })).text();
     assert.match(dashboard, /1 comment is awaiting review/);
-    assert.match(dashboard, /href="\/admin\/columns\/comments"/);
+    assert.match(dashboard, /href="\/admin\/articles\/comments"/);
   }
   assert.doesNotMatch(html, /comment is awaiting review/);
-  assert.equal((await fetch(`${base}/admin/columns/comments`, { redirect: 'manual' })).status, 302);
-  const moderation = await (await fetch(`${base}/admin/columns/comments`, { headers: { cookie: adminCookie } })).text();
+  assert.equal((await fetch(`${base}/admin/articles/comments`, { redirect: 'manual' })).status, 302);
+  const moderation = await (await fetch(`${base}/admin/articles/comments`, { headers: { cookie: adminCookie } })).text();
   assert.match(moderation, /private@example\.com/);
   assert.match(moderation, /&lt;script&gt;hello&lt;\/script&gt;/);
   const action = moderation.match(/action="([^"]+\/approve)"/)[1];
@@ -460,7 +508,7 @@ test('article likes and comments require verification and admin moderation', asy
   assert.equal((await approve('bad')).status, 403);
   assert.equal((await approve(adminToken, 'https://other.example')).status, 403);
   assert.equal((await approve(adminToken)).status, 302);
-  for (const route of ['/admin', '/admin/columns']) {
+  for (const route of ['/admin', '/admin/articles']) {
     const dashboard = await (await fetch(base + route, { headers: { cookie: adminCookie } })).text();
     assert.doesNotMatch(dashboard, /comment is awaiting review/);
   }
@@ -475,7 +523,7 @@ test('article likes and comments require verification and admin moderation', asy
   assert.equal((await post('/columns/rest/comments', { name: 'Third reader', comment: 'A third comment' })).status, 302);
   const pending = await (await fetch(`${base}/admin`, { headers: { cookie: adminCookie } })).text();
   assert.match(pending, /2 comments are awaiting review/);
-  const review = await (await fetch(`${base}/admin/columns/comments`, { headers: { cookie: adminCookie } })).text();
+  const review = await (await fetch(`${base}/admin/articles/comments`, { headers: { cookie: adminCookie } })).text();
   for (const [, deleteAction] of review.matchAll(/action="([^"]+\/delete)"/g)) {
     assert.equal((await fetch(base + deleteAction, {
       method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie: adminCookie },
@@ -517,7 +565,7 @@ test('article storage failures return an error response', async (t) => {
   t.after(close);
   await fs.mkdir(dataDir, { recursive: true });
   await fs.writeFile(path.join(dataDir, 'columns.json'), '{');
-  for (const route of ['/columns', '/columns/rest', '/columns/images/missing.webp']) {
+  for (const route of ['/articles', '/articles/rest', '/articles/images/missing.webp']) {
     const response = await fetch(base + route, { signal: AbortSignal.timeout(2000) });
     assert.equal(response.status, 500);
     assert.match(await response.text(), /Something went wrong/);
@@ -530,20 +578,60 @@ test('article storage failures return an error response', async (t) => {
 });
 
 for (const viewport of ['desktop', 'mobile']) {
+  test(`liking an article keeps the ${viewport} page in place`, async () => {
+    const source = await fs.readFile(new URL('../public/scripts/column-comment.js', import.meta.url), 'utf8');
+    const status = { textContent: '' };
+    const label = { children: [{ textContent: 'Like' }, { textContent: '좋아요' }] };
+    const count = { textContent: '4' };
+    const button = {
+      disabled: false,
+      querySelector: (selector) => selector === '.bilingual' ? label : count,
+    };
+    let submit;
+    const form = {
+      action: 'https://example.com/articles/rest/like',
+      querySelector: (selector) => selector === '[data-like-status]' ? status : button,
+      addEventListener: (_name, handler) => { submit = handler; },
+    };
+    const window = { location: { origin: 'https://example.com', href: 'https://example.com/articles/rest?lang=en#article-body' } };
+    let request;
+    runInNewContext(source, {
+      document: { querySelector: (selector) => selector === '.column-comment-form' ? {
+        querySelector: () => ({ textContent: '', disabled: false }),
+        addEventListener() {},
+      } : form },
+      window, URL, URLSearchParams,
+      FormData: class { *[Symbol.iterator]() { yield ['_reader', 'token']; } },
+      fetch: async (_url, options) => {
+        request = options;
+        return { ok: true, redirected: true, url: 'https://example.com/articles/rest?lang=en&status=liked#article-engagement' };
+      },
+    });
+    let prevented = false;
+    await submit({ preventDefault() { prevented = true; } });
+    assert.equal(prevented, true);
+    assert.equal(request.method, 'POST');
+    assert.equal(request.credentials, 'same-origin');
+    assert.equal(window.location.href, 'https://example.com/articles/rest?lang=en#article-body');
+    assert.equal(button.disabled, true);
+    assert.deepEqual(label.children.map((child) => child.textContent), ['Liked', '좋아요 완료']);
+    assert.equal(count.textContent, '5');
+  });
+
   test(`comment submission keeps the ${viewport} page in place and preserves input on failure`, async () => {
     const source = await fs.readFile(new URL('../public/scripts/column-comment.js', import.meta.url), 'utf8');
     const status = { textContent: '' };
     const button = { disabled: false };
     let submit;
     let resets = 0;
-    let response = { ok: true, redirected: true, url: 'https://example.com/columns/rest?lang=en&status=submitted#article-engagement' };
+    let response = { ok: true, redirected: true, url: 'https://example.com/articles/rest?lang=en&status=submitted#article-engagement' };
     const form = {
-      action: 'https://example.com/columns/rest/comments',
+      action: 'https://example.com/articles/rest/comments',
       querySelector: (selector) => selector === '[data-comment-status]' ? status : button,
       addEventListener: (_name, handler) => { submit = handler; },
       reset: () => { resets++; },
     };
-    const window = { location: { origin: 'https://example.com', href: 'https://example.com/columns/rest?lang=en' } };
+    const window = { location: { origin: 'https://example.com', href: 'https://example.com/articles/rest?lang=en' } };
     runInNewContext(source, {
       document: { querySelector: () => form }, window, URL, URLSearchParams,
       FormData: class { *[Symbol.iterator]() { yield ['comment', 'Hello']; } },
@@ -552,16 +640,16 @@ for (const viewport of ['desktop', 'mobile']) {
     let prevented = false;
     await submit({ preventDefault() { prevented = true; } });
     assert.equal(prevented, true);
-    assert.equal(window.location.href, 'https://example.com/columns/rest?lang=en');
+    assert.equal(window.location.href, 'https://example.com/articles/rest?lang=en');
     assert.match(status.textContent, /comment will appear after review/);
     assert.equal(resets, 1);
     assert.equal(button.disabled, false);
-    response = { ok: false, status: 429, redirected: false, url: 'https://example.com/columns/rest/comments' };
+    response = { ok: false, status: 429, redirected: false, url: 'https://example.com/articles/rest/comments' };
     await submit({ preventDefault() {} });
     assert.match(status.textContent, /Too many requests/);
     assert.equal(resets, 1);
     assert.equal(button.disabled, false);
-    response = { ok: true, redirected: false, url: 'https://example.com/columns/rest/comments' };
+    response = { ok: true, redirected: false, url: 'https://example.com/articles/rest/comments' };
     await submit({ preventDefault() {} });
     assert.match(status.textContent, /Could not submit/);
     assert.equal(resets, 1);
@@ -1239,7 +1327,7 @@ for (const initialDesktop of [true, false]) {
     assert.match(css, /grid-template-areas:\s*"about sermons"\s*"gallery articles"\s*"contact contact"/);
     assert.match(css, /@media \(min-width: 681px\)\s*\{[\s\S]*?grid-template-areas:\s*"about about sermons sermons articles articles"\s*"\. gallery gallery contact contact \."/);
     const links = {};
-    let order = ['/about', '/sermons', '/gallery', '/columns', '/contact'];
+    let order = ['/about', '/sermons', '/gallery', '/articles', '/contact'];
     const document = { activeElement: null };
     for (const href of order) {
       links[href] = {
@@ -1261,14 +1349,14 @@ for (const initialDesktop of [true, false]) {
     let changed;
     const media = { matches: initialDesktop, addEventListener(_type, callback) { changed = callback; } };
     runInNewContext(source, { document, window: { matchMedia: () => media } });
-    const desktopOrder = ['/about', '/sermons', '/columns', '/gallery', '/contact'];
-    const mobileOrder = ['/about', '/sermons', '/gallery', '/columns', '/contact'];
+    const desktopOrder = ['/about', '/sermons', '/articles', '/gallery', '/contact'];
+    const mobileOrder = ['/about', '/sermons', '/gallery', '/articles', '/contact'];
     assert.deepEqual(order, initialDesktop ? desktopOrder : mobileOrder);
-    document.activeElement = links[initialDesktop ? '/gallery' : '/columns'];
+    document.activeElement = links[initialDesktop ? '/gallery' : '/articles'];
     media.matches = !initialDesktop;
     changed();
     assert.deepEqual(order, initialDesktop ? mobileOrder : desktopOrder);
-    assert.equal(document.activeElement, links[initialDesktop ? '/gallery' : '/columns']);
+    assert.equal(document.activeElement, links[initialDesktop ? '/gallery' : '/articles']);
   });
 }
 
@@ -1308,9 +1396,9 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(home, /class="btn btn-hero btn-mint" href="\/about"/);
   const welcomeActions = home.match(/<div class="actions" data-welcome-actions>([\s\S]*?)<\/div>/)[1];
   assert.deepEqual([...welcomeActions.matchAll(/href="([^"]+)"/g)].map((match) => match[1]), [
-    '/about', '/sermons', '/gallery', '/columns', '/contact',
+    '/about', '/sermons', '/gallery', '/articles', '/contact',
   ]);
-  assert.match(welcomeActions, /href="\/columns"><span class="bilingual"><span lang="en">Articles<\/span><span lang="ko">목회 칼럼<\/span>/);
+  assert.match(welcomeActions, /href="\/articles"><span class="bilingual"><span lang="en">Articles<\/span><span lang="ko">목회 칼럼<\/span>/);
   assert.match(welcomeActions, /href="\/gallery"><span class="bilingual"><span lang="en">Gallery<\/span><span lang="ko">갤러리<\/span>/);
   assert.match(home, /<nav[^>]*>[\s\S]*href="\/about"[\s\S]*<\/nav>/);
   const about = await fetch(`${base}/about`);
@@ -1430,7 +1518,7 @@ test('compact header displays bilingual navigation in three columns with accessi
   assert.ok(header);
   for (const [href, en, ko] of [
     ['/', 'Welcome', '환영합니다'], ['/about', 'About', '소개'], ['/sermons', 'Sermons', '설교'],
-    ['/columns', 'Articles', '목회 칼럼'], ['/gallery', 'Gallery', '갤러리'], ['/contact', 'Contact', '연락처'],
+    ['/articles', 'Articles', '목회 칼럼'], ['/gallery', 'Gallery', '갤러리'], ['/contact', 'Contact', '연락처'],
   ]) {
     assert.match(header, new RegExp(`href="${href}"[^>]*><span class="bilingual"><span lang="en">${en}</span><span lang="ko">${ko}</span>`));
   }

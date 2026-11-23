@@ -34,12 +34,47 @@ function insert(editor, node) {
   range.insertNode(node);
   range.setStartAfter(node);
   range.collapse(true);
-  editor.surface.focus();
+  editor.surface.focus({ preventScroll: true });
   const selection = window.getSelection();
   selection.removeAllRanges();
   selection.addRange(range);
   editor.range = range.cloneRange();
   dirty = true;
+}
+
+function restoreScroll(x, y) {
+  if (window.scrollX === x && window.scrollY === y) return;
+  const rootStyle = document.documentElement.style;
+  const behavior = rootStyle.scrollBehavior;
+  rootStyle.scrollBehavior = 'auto';
+  try {
+    window.scrollTo(x, y);
+  } finally {
+    rootStyle.scrollBehavior = behavior;
+  }
+}
+
+function format(editor, name) {
+  const range = editor.range?.cloneRange();
+  if (!range || !editor.surface.contains(range.startContainer) || !editor.surface.contains(range.endContainer)) {
+    status.textContent = 'Place the cursor in the article first. · 먼저 기사에 커서를 놓아 주세요.';
+    return;
+  }
+  const scrollX = window.scrollX;
+  const scrollY = window.scrollY;
+  editor.surface.focus({ preventScroll: true });
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  if (!document.execCommand(name, false)) {
+    restoreScroll(scrollX, scrollY);
+    status.textContent = 'Text formatting is unavailable in this browser. · 이 브라우저에서는 글 서식을 사용할 수 없습니다.';
+    return;
+  }
+  restoreScroll(scrollX, scrollY);
+  rememberSelection(editor);
+  dirty = true;
+  status.textContent = '';
 }
 
 function serializeChildren(element) {
@@ -81,27 +116,18 @@ for (const editor of editors) {
     event.preventDefault();
     status.textContent = 'Use Insert image to add pictures. · 이미지는 이미지 삽입을 사용해 주세요.';
   });
+  editor.surface.addEventListener('keydown', (event) => {
+    if (!(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return;
+    const formatName = { b: 'bold', i: 'italic', u: 'underline' }[event.key.toLowerCase()];
+    if (!formatName) return;
+    event.preventDefault();
+    rememberSelection(editor);
+    format(editor, formatName);
+  });
 
   for (const button of section.querySelectorAll('[data-format]')) {
     button.addEventListener('mousedown', (event) => event.preventDefault());
-    button.addEventListener('click', () => {
-      const range = editor.range?.cloneRange();
-      if (!range || !editor.surface.contains(range.startContainer) || !editor.surface.contains(range.endContainer)) {
-        status.textContent = 'Place the cursor in the article first. · 먼저 기사에 커서를 놓아 주세요.';
-        return;
-      }
-      editor.surface.focus();
-      const selection = window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-      if (!document.execCommand(button.dataset.format, false)) {
-        status.textContent = 'Text formatting is unavailable in this browser. · 이 브라우저에서는 글 서식을 사용할 수 없습니다.';
-        return;
-      }
-      rememberSelection(editor);
-      dirty = true;
-      status.textContent = '';
-    });
+    button.addEventListener('click', () => format(editor, button.dataset.format));
   }
 
   section.querySelector('[data-insert-link]').addEventListener('click', () => {
@@ -190,7 +216,7 @@ form.addEventListener('submit', async (event) => {
     }
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not save the article. · 기사를 저장할 수 없습니다.');
-    if (typeof result.location !== 'string' || !result.location.startsWith('/columns/')) {
+    if (typeof result.location !== 'string' || !result.location.startsWith('/articles/')) {
       throw new Error('The saved article address was invalid. · 저장된 기사 주소가 올바르지 않습니다.');
     }
     dirty = false;

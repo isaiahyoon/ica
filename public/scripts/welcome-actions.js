@@ -1,6 +1,6 @@
 const actions = document.querySelector('[data-welcome-actions]');
 const gallery = actions.querySelector('[href="/gallery"]');
-const articles = actions.querySelector('[href="/columns"]');
+const articles = actions.querySelector('[href="/articles"]');
 const desktop = window.matchMedia('(min-width: 681px)');
 
 function arrangeActions() {
