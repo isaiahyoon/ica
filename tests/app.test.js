@@ -206,6 +206,7 @@ test('visual article editing preserves links and safely publishes inline images'
   const editorHtml = await editor.text();
   assert.match(editorHtml, /data-column-surface[\s\S]*data-insert-image[\s\S]*data-insert-link|data-column-surface[\s\S]*data-insert-link[\s\S]*data-insert-image/);
   assert.match(editorHtml, /data-pastor-select[\s\S]*Pastor John Yoon[\s\S]*윤태선 목사/);
+  assert.equal((editorHtml.match(/data-format="(?:bold|italic|underline)"/g) || []).length, 6);
   assert.equal((await fetch(`${base}/admin/columns/new`, { redirect: 'manual' })).status, 302);
 
   const imageId = 'c65c7e29-b623-40cf-9c2c-6e59f214057a';
@@ -217,6 +218,8 @@ test('visual article editing preserves links and safely publishes inline images'
       speakerEn: 'Pastor John Yoon', speakerKo: '윤태선 목사',
       bodyEnDoc: JSON.stringify([{ type: 'block', children: [
         { type: 'text', text: 'Before & <after> ' },
+        { type: 'bold', children: [{ type: 'text', text: 'Bold & ' }, { type: 'italic', children: [{ type: 'text', text: '<italic>' }] }] },
+        { type: 'underline', children: [{ type: 'text', text: 'Underlined' }] },
         { type: 'link', href: 'https://example.com/watch?a=1&b=2', children: [{ type: 'text', text: 'Watch' }] },
         { type: 'image', file: `new:${imageId}`, alt: 'A church photo' },
         { type: 'text', text: ' Then more text.' },
@@ -239,6 +242,8 @@ test('visual article editing preserves links and safely publishes inline images'
   assert.match((await missing.json()).error, /image is missing/);
   const badLink = makeForm({ bodyEnDoc: JSON.stringify([{ type: 'link', href: 'javascript:alert(1)', children: [] }]) });
   assert.equal((await post('/admin/columns/rich', badLink)).status, 400);
+  const badFormatting = makeForm({ bodyEnDoc: JSON.stringify([{ type: 'bold', children: [{ type: 'image', file: `new:${imageId}`, alt: '' }] }]) });
+  assert.equal((await post('/admin/columns/rich', badFormatting)).status, 400);
 
   const create = makeForm();
   create.set('inlineImages', new Blob([image], { type: 'image/png' }), `${imageId}.png`);
@@ -252,15 +257,17 @@ test('visual article editing preserves links and safely publishes inline images'
   const inlineImage = saved.inlineImages[0];
   const cover = saved.image;
   const publicPage = await (await fetch(base + location)).text();
-  assert.match(publicPage, /Before &amp; &lt;after&gt; <a href="https:\/\/example\.com\/watch\?a=1&amp;b=2"/);
+  assert.match(publicPage, /<a href="https:\/\/example\.com\/watch\?a=1&amp;b=2"/);
   assert.match(publicPage, /<img src="\/columns\/images\/[^"]+" data-column-image="[^"]+" alt="A church photo"/);
   assert.match(publicPage, /Then more text\./);
+  assert.match(publicPage, /<strong>Bold &amp; <em>&lt;italic&gt;<\/em><\/strong><u>Underlined<\/u>/);
   assert.doesNotMatch(publicPage, /class="column-byline"><img/);
   assert.equal((await fetch(`${base}/columns/images/${inlineImage}`)).status, 200);
 
   const editPage = await (await fetch(`${base}/admin/columns/${saved.id}/edit`, { headers: { cookie } })).text();
   const revision = editPage.match(/name="revision" value="([^"]+)"/)[1];
   assert.match(editPage, /data-column-image="/);
+  assert.match(editPage, /<strong>Bold &amp; <em>&lt;italic&gt;<\/em><\/strong><u>Underlined<\/u>/);
   const editedDoc = JSON.stringify([{ type: 'block', children: [
     { type: 'text', text: 'Updated text' }, { type: 'image', file: inlineImage, alt: 'Updated photo' },
   ] }]);
@@ -345,6 +352,64 @@ test('article language preference preserves explicit links', async () => {
   assert.equal(execute('https://example.com/columns/rest', [], 'ko-KR'), 'https://example.com/columns/rest?lang=ko');
   assert.equal(execute('https://example.com/columns/rest?lang=en', ['ko']), '');
 });
+
+for (const viewport of ['desktop', 'mobile']) {
+  test(`article formatting controls preserve selections and serialize on ${viewport}`, async () => {
+    const source = await fs.readFile(new URL('../public/scripts/admin-column-editor.js', import.meta.url), 'utf8');
+    const handlers = new Map();
+    const commands = [];
+    const fields = new Map();
+    const text = { nodeType: 3, data: 'Word' };
+    const underline = { nodeType: 1, tagName: 'U', childNodes: [text] };
+    const italic = { nodeType: 1, tagName: 'I', childNodes: [underline] };
+    const bold = { nodeType: 1, tagName: 'B', childNodes: [italic] };
+    const range = { startContainer: text, endContainer: text, cloneRange() { return this; } };
+    const selection = { rangeCount: 1, anchorNode: text, focusNode: text, getRangeAt: () => range, removeAllRanges() {}, addRange() {} };
+    const button = (format) => ({ dataset: { format }, addEventListener: (name, fn) => handlers.set(`${format}:${name}`, fn) });
+    const buttons = ['bold', 'italic', 'underline'].map(button);
+    const status = { textContent: '' };
+    const submit = {};
+    function section(language, children) {
+      const surface = { childNodes: children, hidden: true, contains: () => true, focus() {}, addEventListener() {}, closest: () => wrapper };
+      const wrapper = {
+        dataset: { columnLanguage: language },
+        querySelector: (selector) => ({
+          '[data-column-surface]': surface, '[data-column-fallback]': {}, '.column-editor-tools': {},
+          '[data-insert-link]': { addEventListener() {} }, '[data-insert-image]': { addEventListener() {} },
+        })[selector],
+        querySelectorAll: () => language === 'en' ? buttons : [],
+      };
+      return wrapper;
+    }
+    const sections = [section('en', [bold]), section('ko', [])];
+    const form = {
+      action: '/save', querySelector: (selector) => selector === '[data-column-status]' ? status : submit,
+      querySelectorAll: () => sections,
+      addEventListener: (name, fn) => handlers.set(`form:${name}`, fn),
+    };
+    const document = {
+      querySelector: () => form, addEventListener: (name, fn) => handlers.set(`document:${name}`, fn),
+      execCommand: (command) => { commands.push(command); return true; },
+    };
+    const context = {
+      document, window: { getSelection: () => selection, addEventListener() {} }, Node: { TEXT_NODE: 3, ELEMENT_NODE: 1 },
+      FormData: class { set(key, value) { fields.set(key, value); } get() { return 'token'; } },
+      fetch: async () => ({ ok: false, headers: { get: () => 'application/json' }, json: async () => ({ error: 'Test failure' }) }),
+      Map, Set,
+    };
+    runInNewContext(source, context);
+    handlers.get('document:selectionchange')();
+    for (const format of ['bold', 'italic', 'underline']) {
+      let prevented = false;
+      handlers.get(`${format}:mousedown`)({ preventDefault() { prevented = true; } });
+      assert.equal(prevented, true);
+      handlers.get(`${format}:click`)();
+    }
+    assert.deepEqual(commands, ['bold', 'italic', 'underline']);
+    await handlers.get('form:submit')({ preventDefault() {} });
+    assert.deepEqual(JSON.parse(fields.get('bodyEnDoc')), [{ type: 'bold', children: [{ type: 'italic', children: [{ type: 'underline', children: [{ type: 'text', text: 'Word' }] }] }] }]);
+  });
+}
 
 test('article likes and comments require verification and admin moderation', async (t) => {
   const { base, dataDir, close } = await boot();

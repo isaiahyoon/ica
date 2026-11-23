@@ -50,6 +50,8 @@ function serializeChildren(element) {
     if (node.tagName === 'IMG') return [{ type: 'image', file: node.dataset.columnImage, alt: node.alt }];
     if (node.tagName === 'A') return [{ type: 'link', href: node.getAttribute('href'), children: serializeChildren(node) }];
     if (node.tagName === 'DIV' || node.tagName === 'P') return [{ type: 'block', children: serializeChildren(node) }];
+    const format = { B: 'bold', STRONG: 'bold', I: 'italic', EM: 'italic', U: 'underline' }[node.tagName];
+    if (format) return [{ type: format, children: serializeChildren(node) }];
     return serializeChildren(node);
   });
 }
@@ -79,6 +81,28 @@ for (const editor of editors) {
     event.preventDefault();
     status.textContent = 'Use Insert image to add pictures. · 이미지는 이미지 삽입을 사용해 주세요.';
   });
+
+  for (const button of section.querySelectorAll('[data-format]')) {
+    button.addEventListener('mousedown', (event) => event.preventDefault());
+    button.addEventListener('click', () => {
+      const range = editor.range?.cloneRange();
+      if (!range || !editor.surface.contains(range.startContainer) || !editor.surface.contains(range.endContainer)) {
+        status.textContent = 'Place the cursor in the article first. · 먼저 기사에 커서를 놓아 주세요.';
+        return;
+      }
+      editor.surface.focus();
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      if (!document.execCommand(button.dataset.format, false)) {
+        status.textContent = 'Text formatting is unavailable in this browser. · 이 브라우저에서는 글 서식을 사용할 수 없습니다.';
+        return;
+      }
+      rememberSelection(editor);
+      dirty = true;
+      status.textContent = '';
+    });
+  }
 
   section.querySelector('[data-insert-link]').addEventListener('click', () => {
     const urlInput = section.querySelector('[data-link-url]');

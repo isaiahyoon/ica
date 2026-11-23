@@ -611,6 +611,8 @@ audio { width: 100%; margin-top: .5rem; }
 .column-editor-surface:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .column-editor-surface img { display: block; max-width: 100%; max-height: 24rem; width: auto; height: auto; margin: 1rem auto; }
 .column-editor-tools { display: grid; gap: .5rem; }
+.column-formatting { display: flex; flex-wrap: wrap; gap: .5rem; }
+.column-editor-tools .column-formatting button { min-width: 48px; min-height: 48px; margin: 0; }
 .column-editor-tools details { padding: .8rem; border: 1px solid var(--line); background: var(--paper); }
 .column-editor-tools summary { cursor: pointer; color: var(--navy); }
 .column-editor-tools label, .column-editor-tools button { margin-top: .75rem; }
