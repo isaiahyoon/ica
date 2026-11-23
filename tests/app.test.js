@@ -255,6 +255,7 @@ test('visual article editing preserves links and safely publishes inline images'
   assert.match(publicPage, /Before &amp; &lt;after&gt; <a href="https:\/\/example\.com\/watch\?a=1&amp;b=2"/);
   assert.match(publicPage, /<img src="\/columns\/images\/[^"]+" data-column-image="[^"]+" alt="A church photo"/);
   assert.match(publicPage, /Then more text\./);
+  assert.doesNotMatch(publicPage, /class="column-byline"><img/);
   assert.equal((await fetch(`${base}/columns/images/${inlineImage}`)).status, 200);
 
   const editPage = await (await fetch(`${base}/admin/columns/${saved.id}/edit`, { headers: { cookie } })).text();
@@ -402,8 +403,9 @@ test('article likes and comments require verification and admin moderation', asy
   assert.match(html, /<ol class="column-comments">/);
   assert.ok(html.indexOf('class="column-response"') < html.indexOf('<ol class="column-comments">'));
   assert.match(html, /&lt;Reader&gt;/);
+  assert.match(html, /class="column-comment-byline"><strong>&lt;Reader&gt;<\/strong><time datetime="\d{4}-\d{2}-\d{2}">/);
   assert.match(html, /&lt;script&gt;hello&lt;\/script&gt;/);
-  assert.doesNotMatch(html, /private@example\.com|<script>hello/);
+  assert.doesNotMatch(html, /private@example\.com|<script>hello|data-format=/);
   assert.equal((await post('/columns/rest/comments', { name: 'Another reader', comment: 'A second comment' })).status, 302);
   assert.equal((await post('/columns/rest/comments', { name: 'Third reader', comment: 'A third comment' })).status, 302);
   const pending = await (await fetch(`${base}/admin`, { headers: { cookie: adminCookie } })).text();
