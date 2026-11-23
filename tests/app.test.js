@@ -432,7 +432,7 @@ test('article language preference preserves explicit links', async () => {
   assert.equal(execute('https://example.com/articles/rest?lang=en', ['ko']), '');
 });
 
-test('article comment dates use the US Pacific calendar date', async (t) => {
+test('article comments show Pacific dates and times to readers and admins', async (t) => {
   const { base, dataDir, close } = await boot();
   t.after(close);
   await fs.mkdir(dataDir, { recursive: true });
@@ -443,13 +443,68 @@ test('article comment dates use the US Pacific calendar date', async (t) => {
     id: 'article1', likes: [], comments: [{
       id: 'comment1', name: 'Isaiah', text: 'Interesting.', approved: true,
       createdAt: '2026-11-23T07:30:00.000Z',
+    }, {
+      id: 'comment2', name: 'Reader', text: 'Summer.', approved: true,
+      createdAt: '2026-07-01T19:05:00.000Z',
     }],
   }]));
 
   const html = await (await fetch(`${base}/articles/rest?lang=en`)).text();
-  assert.match(html, /<time datetime="2026-11-22">November 22, 2026 · 2026년 11월 22일<\/time>/);
+  assert.match(html, /<time datetime="2026-11-23T07:30:00\.000Z">November 22, 2026, 11:30 PM PST/);
+  assert.match(html, /<time datetime="2026-07-01T19:05:00\.000Z">July 1, 2026, 12:05 PM PDT/);
+  const cookie = await login(base);
+  const moderation = await (await fetch(`${base}/admin/articles/comments`, { headers: { cookie } })).text();
+  assert.match(moderation, /November 22, 2026, 11:30 PM PST/);
+  assert.match(moderation, /July 1, 2026, 12:05 PM PDT/);
   assert.equal(pacificDate('2026-11-23T07:30:00.000Z'), '2026-11-22');
   assert.equal(formatDate('2026-11-22', 'en-US'), 'November 22, 2026');
+});
+
+test('admin like notifications count new likes and can be safely marked read', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'columns.json'), JSON.stringify([{
+    id: 'article1', slug: 'rest', titleEn: 'Rest & peace', bodyEn: 'Text',
+  }]));
+  await fs.writeFile(path.join(dataDir, 'column-engagement.json'), JSON.stringify([{
+    id: 'article1', likes: ['legacy-like'], comments: [],
+  }]));
+  const adminCookie = await login(base);
+  const adminToken = await csrfToken(base, adminCookie);
+  const adminPage = async (route = '/admin') => (await (await fetch(base + route, { headers: { cookie: adminCookie } })).text());
+  assert.doesNotMatch(await adminPage(), /new likes? on/);
+  const readerResponse = await fetch(`${base}/articles/rest?lang=en`);
+  const reader = readerResponse.headers.get('set-cookie').split(';')[0];
+  const readerToken = (await readerResponse.text()).match(/name="_reader" value="([^"]+)"/)[1];
+  const like = (action) => fetch(`${base}/articles/rest/like`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie: reader },
+    body: new URLSearchParams({ _reader: readerToken, like_action: action }),
+  });
+  assert.equal((await like('like')).status, 302);
+  assert.equal((await like('like')).status, 302);
+  for (const route of ['/admin', '/admin/articles']) {
+    const page = await adminPage(route);
+    assert.match(page, /1 new like on/);
+    assert.match(page, /Rest &amp; peace/);
+    assert.match(page, /name="through" value="1"/);
+  }
+  assert.equal((await like('unlike')).status, 302);
+  assert.equal((await like('like')).status, 302);
+  assert.match(await adminPage(), /2 new likes on/);
+  const markRead = (through, csrf = adminToken, origin = base, cookie = adminCookie) => fetch(`${base}/admin/articles/article1/likes/read`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), origin, cookie },
+    body: new URLSearchParams({ _csrf: csrf, through }),
+  });
+  assert.equal((await markRead('1', 'bad')).status, 403);
+  assert.equal((await markRead('1', adminToken, 'https://other.example')).status, 403);
+  assert.equal((await markRead('1', adminToken, base, '')).status, 302);
+  assert.equal((await markRead('invalid')).status, 400);
+  assert.equal((await markRead('1')).status, 302);
+  assert.equal((await markRead('1')).status, 302);
+  assert.match(await adminPage(), /1 new like on/);
+  assert.equal((await markRead('2')).status, 302);
+  assert.doesNotMatch(await adminPage(), /new likes? on/);
 });
 
 for (const viewport of ['desktop', 'mobile']) {
@@ -623,7 +678,7 @@ test('article likes and comments require verification and admin moderation', asy
   assert.match(html, /<ol class="column-comments">/);
   assert.ok(html.indexOf('class="column-response"') < html.indexOf('<ol class="column-comments">'));
   assert.match(html, /&lt;Reader&gt;/);
-  assert.match(html, /class="column-comment-byline"><strong>&lt;Reader&gt;<\/strong><time datetime="\d{4}-\d{2}-\d{2}">/);
+  assert.match(html, /class="column-comment-byline"><strong>&lt;Reader&gt;<\/strong><time datetime="\d{4}-\d{2}-\d{2}T/);
   assert.match(html, /&lt;script&gt;hello&lt;\/script&gt;/);
   assert.doesNotMatch(html, /private@example\.com|<script>hello|data-format=/);
   assert.equal((await post('/columns/rest/comments', { name: 'Another reader', comment: 'A second comment' })).status, 302);

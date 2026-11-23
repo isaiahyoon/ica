@@ -234,14 +234,17 @@ export function createApp({
     const columns = await store.read('columns');
     const section = req.path === '/admin/sermons' ? 'sermons' : req.path === '/admin/articles' ? 'columns' : 'home';
     const columnIds = new Set(columns.map((column) => column.id));
-    const pendingComments = section === 'sermons' ? 0 : (await store.read('column-engagement'))
-      .filter((record) => columnIds.has(record.id))
+    const engagement = section === 'sermons' ? [] : (await store.read('column-engagement'))
+      .filter((record) => columnIds.has(record.id));
+    const pendingComments = engagement
       .reduce((count, record) => count + record.comments.filter((comment) => !comment.approved).length, 0);
+    const likeNotifications = engagement.filter((record) => (record.likeNoticeSequence || 0) > (record.likeNoticeReadThrough || 0))
+      .map((record) => ({ column: columns.find((column) => column.id === record.id), count: record.likeNoticeSequence - (record.likeNoticeReadThrough || 0), through: record.likeNoticeSequence }));
     if (auth.isOwner(req)) extra = { ...extra, admins: await admins.list() };
     res.set('Cache-Control', 'no-store');
     res.status(status).send(renderPage(req, {
       title: 'Admin', active: 'admin', admin: true,
-      body: view.adminPage({ sermons, columns, section, pendingComments, pastors: await readPastors(), csrfToken: auth.csrfToken(req), ...extra }),
+      body: view.adminPage({ sermons, columns, section, pendingComments, likeNotifications, pastors: await readPastors(), csrfToken: auth.csrfToken(req), ...extra }),
     }));
   };
 
