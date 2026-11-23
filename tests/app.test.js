@@ -9,6 +9,7 @@ import * as totp from '../lib/totp.js';
 import sharp from 'sharp';
 import { createSermonPreviewRenderer } from '../lib/sermon-preview.js';
 import { scriptureLanguageLinks } from '../lib/scripture-links.js';
+import { formatDate, pacificDate } from '../lib/render.js';
 
 const PASSWORD = 'correct horse battery staple';
 
@@ -332,6 +333,8 @@ test('article language links and previews follow the shared language and author'
   assert.match(articleActions, /column-action-share share-link[^>]*href="\/articles\/rest\?lang=en" data-share-title="A place of rest"/);
   assert.match(articleActions, /column-action-copy copy-link[^>]*href="\/articles\/rest\?lang=en"/);
   assert.match(en, /<script src="\/scripts\/sermon-sharing\.js" defer><\/script>/);
+  assert.match(en, /class="column-scroll-top"[^>]*aria-label="Scroll to top · 맨 위로"[^>]*hidden/);
+  assert.match(en, /<script src="\/scripts\/column-scroll\.js" defer><\/script>/);
   assert.match(ko, /data-share-title="쉼의 자리"/);
   assert.match(ko, /href="\?lang=en"/);
   const legacyArticle = await fetch(`${base}/columns/rest?lang=ko`, { redirect: 'manual' });
@@ -352,6 +355,67 @@ test('article language links and previews follow the shared language and author'
   assert.equal((await fetch(`${base}/columns/missing/preview.png`)).status, 404);
 });
 
+test('article jump-to-top button tracks scroll and respects reduced motion', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'columns.json'), JSON.stringify([{
+    id: 'scroll-article', slug: 'scroll-article', titleEn: 'Scroll article',
+    bodyEn: 'Article content', createdAt: new Date().toISOString(),
+  }]));
+  const html = await (await fetch(`${base}/articles/scroll-article`)).text();
+  const scriptResponse = await fetch(`${base}/scripts/column-scroll.js`);
+  assert.equal(scriptResponse.status, 200);
+  const script = await scriptResponse.text();
+
+  const createScrollControl = (reducedMotion) => {
+    const listeners = {};
+    const buttonListeners = {};
+    const scrollingElement = { scrollTop: 0 };
+    const button = {
+      hidden: true,
+      addEventListener: (type, callback) => { buttonListeners[type] = callback; },
+    };
+    const window = {
+      scrollY: 0,
+      addEventListener: (type, callback) => { listeners[type] = callback; },
+      matchMedia: () => ({ matches: reducedMotion }),
+      scrollTo: (options) => { window.lastScroll = options; },
+    };
+    runInNewContext(script, {
+      document: { querySelector: () => button, scrollingElement },
+      window,
+    });
+    return { button, listeners, buttonListeners, scrollingElement, window };
+  };
+
+  assert.match(html, /class="column-scroll-top"/);
+  const normal = createScrollControl(false);
+  assert.equal(normal.button.hidden, true);
+  normal.window.scrollY = 421;
+  normal.listeners.scroll();
+  assert.equal(normal.button.hidden, false);
+  normal.buttonListeners.click();
+  assert.equal(normal.window.lastScroll.top, 0);
+  assert.equal(normal.window.lastScroll.behavior, 'smooth');
+  normal.window.scrollY = 420;
+  normal.listeners.scroll();
+  assert.equal(normal.button.hidden, true);
+
+  const mobile = createScrollControl(false);
+  mobile.scrollingElement.scrollTop = 500;
+  mobile.listeners.scroll();
+  assert.equal(mobile.button.hidden, false);
+  mobile.buttonListeners.click();
+  assert.equal(mobile.window.lastScroll.top, 0);
+  assert.equal(mobile.window.lastScroll.behavior, 'smooth');
+
+  const reduced = createScrollControl(true);
+  reduced.buttonListeners.click();
+  assert.equal(reduced.window.lastScroll.top, 0);
+  assert.equal(reduced.window.lastScroll.behavior, 'instant');
+});
+
 test('article language preference preserves explicit links', async () => {
   const source = await fs.readFile(new URL('../public/scripts/column-language.js', import.meta.url), 'utf8');
   const execute = (href, languages, language = '') => {
@@ -366,6 +430,26 @@ test('article language preference preserves explicit links', async () => {
   assert.equal(execute('https://example.com/articles/rest', ['fr']), 'https://example.com/articles/rest?lang=en');
   assert.equal(execute('https://example.com/articles/rest', [], 'ko-KR'), 'https://example.com/articles/rest?lang=ko');
   assert.equal(execute('https://example.com/articles/rest?lang=en', ['ko']), '');
+});
+
+test('article comment dates use the US Pacific calendar date', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'columns.json'), JSON.stringify([{
+    id: 'article1', slug: 'rest', titleEn: 'Rest', bodyEn: 'Text',
+  }]));
+  await fs.writeFile(path.join(dataDir, 'column-engagement.json'), JSON.stringify([{
+    id: 'article1', likes: [], comments: [{
+      id: 'comment1', name: 'Isaiah', text: 'Interesting.', approved: true,
+      createdAt: '2026-11-23T07:30:00.000Z',
+    }],
+  }]));
+
+  const html = await (await fetch(`${base}/articles/rest?lang=en`)).text();
+  assert.match(html, /<time datetime="2026-11-22">November 22, 2026 · 2026년 11월 22일<\/time>/);
+  assert.equal(pacificDate('2026-11-23T07:30:00.000Z'), '2026-11-22');
+  assert.equal(formatDate('2026-11-22', 'en-US'), 'November 22, 2026');
 });
 
 for (const viewport of ['desktop', 'mobile']) {
