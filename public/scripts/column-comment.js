@@ -7,14 +7,16 @@ const toast = document.querySelector('[data-toast-message]');
 let toastTimer;
 let likePending = false;
 
-function showToast(message, duration = 5000) {
+function showToast(message) {
   clearTimeout(toastTimer);
+  toast.textContent = '';
+  void toast.offsetWidth;
   toast.textContent = message;
-  toastTimer = setTimeout(() => { toast.textContent = ''; }, duration);
+  toastTimer = setTimeout(() => { toast.textContent = ''; }, 3100);
 }
 
 if (toast.textContent.trim()) {
-  toastTimer = setTimeout(() => { toast.textContent = ''; }, 5000);
+  toastTimer = setTimeout(() => { toast.textContent = ''; }, 3100);
 }
 
 likeForm.addEventListener('submit', async (event) => {
@@ -54,7 +56,7 @@ likeForm.addEventListener('submit', async (event) => {
   } catch (error) {
     showToast(error instanceof TypeError
       ? 'Could not save your like. Check your connection and try again. · 좋아요를 저장할 수 없습니다. 연결을 확인한 후 다시 시도해 주세요.'
-      : error.message || 'Could not save your like. Please try again. · 좋아요를 저장할 수 없습니다. 다시 시도해 주세요.', 8000);
+      : error.message || 'Could not save your like. Please try again. · 좋아요를 저장할 수 없습니다. 다시 시도해 주세요.');
   } finally {
     likePending = false;
     likeButton.removeAttribute('aria-busy');
@@ -82,7 +84,7 @@ form.addEventListener('submit', async (event) => {
   } catch (error) {
     showToast(error instanceof TypeError
       ? 'Could not submit the comment. Please check your connection and try again. · 댓글을 보낼 수 없습니다. 연결을 확인한 후 다시 시도해 주세요.'
-      : error.message || 'Could not submit the comment. Please try again. · 댓글을 보낼 수 없습니다. 다시 시도해 주세요.', 8000);
+      : error.message || 'Could not submit the comment. Please try again. · 댓글을 보낼 수 없습니다. 다시 시도해 주세요.');
   } finally {
     button.disabled = false;
   }
