@@ -71,11 +71,13 @@ a { color: var(--deep-teal); text-underline-offset: 3px; }
 .skip { position: absolute; left: -999px; background: var(--navy); color: #fff; padding: .6rem 1rem; z-index: 10; }
 .skip:focus { left: 1rem; top: 1rem; }
 
-/* Header: navy, regal, with a brass rule */
+/* Header: softly layered navy with a brass rule */
 .site-header {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1.5rem;
   padding: .9rem clamp(1rem, 4vw, 3rem);
-  background: linear-gradient(180deg, var(--navy), var(--navy-deep));
+  background:
+    radial-gradient(80% 180% at 15% 0%, rgba(220,215,247,.13), transparent 70%),
+    linear-gradient(115deg, var(--navy), var(--deep-teal) 55%, var(--navy-deep));
   border-bottom: 3px solid; border-image: var(--gold) 1;
   position: sticky; top: 0; z-index: 5;
 }
@@ -105,6 +107,23 @@ nav a:hover::after, nav a:focus-visible::after { animation: nav-sheen .9s ease-i
   text-shadow: 0 0 2px var(--brass-soft), 0 0 9px rgba(223,198,129,.75);
 }
 nav a.is-active { --plate: var(--gold); --fill: linear-gradient(180deg, #fff, var(--blue)); --rim: 2px; color: var(--navy); }
+.site-header nav { gap: .25rem; }
+.site-header nav a { border-radius: .65rem; }
+.site-header nav a.is-active::before { border-radius: calc(.65rem - var(--rim)); }
+.site-header nav a:hover, .site-header nav a:focus-visible {
+  background: rgba(220,215,247,.14);
+  text-shadow: none;
+}
+.site-header nav a:hover::after, .site-header nav a:focus-visible::after { animation: none; }
+.site-header nav a:focus-visible { outline: 3px solid var(--yellow); outline-offset: -3px; box-shadow: none; }
+.site-header nav a.is-active {
+  --fill: linear-gradient(135deg, var(--paper), var(--sky) 70%, var(--lavender));
+}
+.site-header nav a.is-active:hover, .site-header nav a.is-active:focus-visible {
+  --fill: linear-gradient(135deg, var(--paper), var(--blue) 65%, var(--lavender));
+  background: var(--plate);
+}
+.site-header nav a.is-active:focus-visible { outline-color: var(--navy); }
 
 main { flex: 1; width: 100%; max-width: 1000px; margin: 0 auto; padding: clamp(1.5rem, 4vw, 3rem) clamp(1rem, 4vw, 2rem) 4rem; }
 main.wide { max-width: 1200px; }
@@ -628,7 +647,7 @@ input:focus, textarea:focus, select:focus { outline: 3px solid rgba(63,127,166,.
 
 @media (max-width: 680px) {
   .site-header { justify-content: center; padding: .5rem; gap: .4rem; }
-  .site-header nav { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
+  .site-header nav { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .15rem; }
   .site-header nav a { display: flex; align-items: center; justify-content: center; min-height: 48px; padding: .25rem; font-size: clamp(.8125rem, 3.6vw, .9375rem); text-align: center; }
   .site-header nav a:last-child:nth-child(3n + 1) { grid-column: 2; }
   .site-header nav .bilingual { align-items: center; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }

@@ -1358,6 +1358,12 @@ test('compact header displays bilingual navigation in three columns with accessi
   }
   assert.match(header, /href="\/sermons" aria-current="page" class="is-active"/);
   const css = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  assert.match(css, /\.site-header nav a\s*\{[^}]*border-radius:\s*\.65rem/s);
+  assert.match(css, /\.site-header nav a\.is-active::before\s*\{[^}]*border-radius:\s*calc\(\.65rem - var\(--rim\)\)/s);
+  assert.match(css, /\.site-header nav a:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--yellow\)/s);
+  assert.match(css, /\.site-header nav a\.is-active:focus-visible\s*\{[^}]*outline-color:\s*var\(--navy\)/s);
+  assert.match(css, /\.site-header nav a\.is-active\s*\{[^}]*--fill:\s*linear-gradient/s);
+  assert.match(css, /\.site-header nav a:hover::after,\s*\.site-header nav a:focus-visible::after\s*\{[^}]*animation:\s*none/s);
   const mobile = css.slice(css.lastIndexOf('@media (max-width: 680px)'), css.lastIndexOf('@media (max-width: 560px)'));
   assert.match(mobile, /\.site-header nav\s*\{[^}]*grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/s);
   assert.match(mobile, /\.site-header nav a\s*\{[^}]*min-height:\s*48px/s);

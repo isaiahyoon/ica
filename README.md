@@ -6,7 +6,7 @@ Public website: [immanuelchurchofamerica.org](https://immanuelchurchofamerica.or
 
 ## Features
 
-- **Navigation** — a compact bilingual header arranges the six public links in three columns on smaller screens, with generous touch targets. A signed-in admin link appears centered below them.
+- **Navigation** — a softly layered navy bilingual header with rounded links and a pastel active link arranges the six public links in three columns on smaller screens, with generous touch targets. A signed-in admin link appears centered below them.
 - **Information page** (landing page, `/`) — welcome and overview, with About, Sermons, Articles, Gallery, and Contact links in a responsive action grid. Desktop shows three links above two centered links; mobile shows a 2×2 grid with Contact spanning the final row. Scripture passages open English KJV and Korean KRV links to that passage.
 - **About** (`/about`) — bilingual page on our family church, worship services and times, worship style, preaching, what we affirm, and leadership with contact numbers.
 - **Sermons** (`/sermons`, `/sermons/:id`) — audio players, bilingual speaker, service and date, expandable descriptions, native sharing where supported, and copyable links. A bilingual dropdown filters the archive by Sunday 1st/2nd/3rd, Wednesday, or Friday service (`?service=sunday-1`, `sunday-2`, `sunday-3`, `wednesday`, or `friday`), retaining the filter through pagination. All services includes unspecified and custom labels; recognized English and Korean labels match their category. Recognized Scripture references offer KJV and KRV links, including matching bilingual references, multiple passages, and split verse ranges; unrecognized or conflicting references remain plain text.
