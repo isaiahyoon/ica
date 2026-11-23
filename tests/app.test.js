@@ -370,6 +370,12 @@ test('article likes and comments require verification and admin moderation', asy
   assert.doesNotMatch(html, /private@example\.com|&lt;script&gt;hello/);
   const adminCookie = await login(base);
   const adminToken = await csrfToken(base, adminCookie);
+  for (const route of ['/admin', '/admin/columns']) {
+    const dashboard = await (await fetch(base + route, { headers: { cookie: adminCookie } })).text();
+    assert.match(dashboard, /1 comment is awaiting review/);
+    assert.match(dashboard, /href="\/admin\/columns\/comments"/);
+  }
+  assert.doesNotMatch(html, /comment is awaiting review/);
   assert.equal((await fetch(`${base}/admin/columns/comments`, { redirect: 'manual' })).status, 302);
   const moderation = await (await fetch(`${base}/admin/columns/comments`, { headers: { cookie: adminCookie } })).text();
   assert.match(moderation, /private@example\.com/);
@@ -381,13 +387,112 @@ test('article likes and comments require verification and admin moderation', asy
   assert.equal((await approve('bad')).status, 403);
   assert.equal((await approve(adminToken, 'https://other.example')).status, 403);
   assert.equal((await approve(adminToken)).status, 302);
+  for (const route of ['/admin', '/admin/columns']) {
+    const dashboard = await (await fetch(base + route, { headers: { cookie: adminCookie } })).text();
+    assert.doesNotMatch(dashboard, /comment is awaiting review/);
+  }
   html = await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text();
   assert.match(html, /<ol class="column-comments">/);
   assert.ok(html.indexOf('class="column-response"') < html.indexOf('<ol class="column-comments">'));
   assert.match(html, /&lt;Reader&gt;/);
   assert.match(html, /&lt;script&gt;hello&lt;\/script&gt;/);
   assert.doesNotMatch(html, /private@example\.com|<script>hello/);
+  assert.equal((await post('/columns/rest/comments', { name: 'Another reader', comment: 'A second comment' })).status, 302);
+  assert.equal((await post('/columns/rest/comments', { name: 'Third reader', comment: 'A third comment' })).status, 302);
+  const pending = await (await fetch(`${base}/admin`, { headers: { cookie: adminCookie } })).text();
+  assert.match(pending, /2 comments are awaiting review/);
+  const review = await (await fetch(`${base}/admin/columns/comments`, { headers: { cookie: adminCookie } })).text();
+  for (const [, deleteAction] of review.matchAll(/action="([^"]+\/delete)"/g)) {
+    assert.equal((await fetch(base + deleteAction, {
+      method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie: adminCookie },
+      body: new URLSearchParams({ _csrf: adminToken }),
+    })).status, 302);
+  }
+  assert.doesNotMatch(await (await fetch(`${base}/admin`, { headers: { cookie: adminCookie } })).text(), /awaiting review/);
 });
+
+test('reader forms remain valid across application restarts', async (t) => {
+  const { base, dataDir, uploadDir, close } = await boot();
+  t.after(close);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'columns.json'), JSON.stringify([{
+    id: 'article1', slug: 'rest', titleEn: 'Rest', bodyEn: 'Text', createdAt: '2026-11-22',
+  }]));
+  const response = await fetch(`${base}/columns/rest?lang=en`);
+  const reader = response.headers.get('set-cookie').split(';')[0];
+  const token = (await response.text()).match(/name="_reader" value="([^"]+)"/)[1];
+  const reopened = createApp({ dataDir, uploadDir, password: PASSWORD }).listen(0);
+  try {
+    const nextBase = `http://localhost:${reopened.address().port}`;
+    const post = (route, values) => fetch(nextBase + route, {
+      method: 'POST', redirect: 'manual', headers: { ...FORM(nextBase), cookie: reader },
+      body: new URLSearchParams({ _reader: token, lang: 'en', ...values }),
+    });
+    assert.equal((await post('/columns/rest/like', {})).status, 302);
+    assert.equal((await post('/columns/rest/comments', { name: 'Reader', comment: 'Still here' })).status, 302);
+    assert.equal((await post('/columns/rest/comments', { _reader: 'bad', name: 'Reader', comment: 'Invalid' })).status, 403);
+  } finally {
+    const done = new Promise((resolve) => reopened.close(resolve));
+    reopened.closeAllConnections();
+    await done;
+  }
+});
+
+test('article storage failures return an error response', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'columns.json'), '{');
+  for (const route of ['/columns', '/columns/rest', '/columns/images/missing.webp']) {
+    const response = await fetch(base + route, { signal: AbortSignal.timeout(2000) });
+    assert.equal(response.status, 500);
+    assert.match(await response.text(), /Something went wrong/);
+  }
+  await fs.writeFile(path.join(dataDir, 'columns.json'), JSON.stringify([{
+    id: 'article1', slug: 'rest', titleEn: 'Rest', bodyEn: 'Text', createdAt: '2026-11-22',
+  }]));
+  await fs.writeFile(path.join(dataDir, 'column-engagement.json'), '{');
+  assert.equal((await fetch(`${base}/columns/rest`, { signal: AbortSignal.timeout(2000) })).status, 500);
+});
+
+for (const viewport of ['desktop', 'mobile']) {
+  test(`comment submission keeps the ${viewport} page in place and preserves input on failure`, async () => {
+    const source = await fs.readFile(new URL('../public/scripts/column-comment.js', import.meta.url), 'utf8');
+    const status = { textContent: '' };
+    const button = { disabled: false };
+    let submit;
+    let resets = 0;
+    let response = { ok: true, redirected: true, url: 'https://example.com/columns/rest?lang=en&status=submitted#article-engagement' };
+    const form = {
+      action: 'https://example.com/columns/rest/comments',
+      querySelector: (selector) => selector === '[data-comment-status]' ? status : button,
+      addEventListener: (_name, handler) => { submit = handler; },
+      reset: () => { resets++; },
+    };
+    const window = { location: { origin: 'https://example.com', href: 'https://example.com/columns/rest?lang=en' } };
+    runInNewContext(source, {
+      document: { querySelector: () => form }, window, URL, URLSearchParams,
+      FormData: class { *[Symbol.iterator]() { yield ['comment', 'Hello']; } },
+      fetch: async () => response,
+    });
+    let prevented = false;
+    await submit({ preventDefault() { prevented = true; } });
+    assert.equal(prevented, true);
+    assert.equal(window.location.href, 'https://example.com/columns/rest?lang=en');
+    assert.match(status.textContent, /comment will appear after review/);
+    assert.equal(resets, 1);
+    assert.equal(button.disabled, false);
+    response = { ok: false, status: 429, redirected: false, url: 'https://example.com/columns/rest/comments' };
+    await submit({ preventDefault() {} });
+    assert.match(status.textContent, /Too many requests/);
+    assert.equal(resets, 1);
+    assert.equal(button.disabled, false);
+    response = { ok: true, redirected: false, url: 'https://example.com/columns/rest/comments' };
+    await submit({ preventDefault() {} });
+    assert.match(status.textContent, /Could not submit/);
+    assert.equal(resets, 1);
+  });
+}
 const secrets = new Map();
 const lastSteps = new Map();
 const cookieOf = (res) => res.headers.get('set-cookie').split(';')[0];
