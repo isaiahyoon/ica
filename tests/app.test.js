@@ -9,6 +9,7 @@ import * as totp from '../lib/totp.js';
 import sharp from 'sharp';
 import { createSermonPreviewRenderer } from '../lib/sermon-preview.js';
 import { scriptureLanguageLinks } from '../lib/scripture-links.js';
+import { formatDate, pacificDate } from '../lib/render.js';
 
 const PASSWORD = 'correct horse battery staple';
 
@@ -429,6 +430,26 @@ test('article language preference preserves explicit links', async () => {
   assert.equal(execute('https://example.com/articles/rest', ['fr']), 'https://example.com/articles/rest?lang=en');
   assert.equal(execute('https://example.com/articles/rest', [], 'ko-KR'), 'https://example.com/articles/rest?lang=ko');
   assert.equal(execute('https://example.com/articles/rest?lang=en', ['ko']), '');
+});
+
+test('article comment dates use the US Pacific calendar date', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'columns.json'), JSON.stringify([{
+    id: 'article1', slug: 'rest', titleEn: 'Rest', bodyEn: 'Text',
+  }]));
+  await fs.writeFile(path.join(dataDir, 'column-engagement.json'), JSON.stringify([{
+    id: 'article1', likes: [], comments: [{
+      id: 'comment1', name: 'Isaiah', text: 'Interesting.', approved: true,
+      createdAt: '2026-11-23T07:30:00.000Z',
+    }],
+  }]));
+
+  const html = await (await fetch(`${base}/articles/rest?lang=en`)).text();
+  assert.match(html, /<time datetime="2026-11-22">November 22, 2026 · 2026년 11월 22일<\/time>/);
+  assert.equal(pacificDate('2026-11-23T07:30:00.000Z'), '2026-11-22');
+  assert.equal(formatDate('2026-11-22', 'en-US'), 'November 22, 2026');
 });
 
 for (const viewport of ['desktop', 'mobile']) {
