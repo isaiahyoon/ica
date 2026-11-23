@@ -306,6 +306,13 @@ test('article language links and previews follow the shared language and author'
   assert.match(ko, /property="og:url" content="https:\/\/immanuelchurchofamerica.org\/columns\/rest\?lang=ko"/);
   assert.match(ko, /property="og:image" content="[^"]+\/columns\/rest\/preview\.png\?lang=ko&amp;v=[a-f0-9]+"/);
   assert.match(ko, /property="og:image:alt" content="쉼의 자리 · 윤태선 목사 · /);
+  const articleActions = en.match(/<nav class="column-footer"[\s\S]*?<\/nav>/)[0];
+  assert.equal((articleActions.match(/class="btn btn-ghost column-action/g) || []).length, 3);
+  assert.match(articleActions, /column-action-all[^>]*href="\/columns"/);
+  assert.match(articleActions, /column-action-share share-link[^>]*href="\/columns\/rest" data-share-title="A place of rest"/);
+  assert.match(articleActions, /column-action-copy copy-link[^>]*href="\/columns\/rest"/);
+  assert.match(en, /<script src="\/scripts\/sermon-sharing\.js" defer><\/script>/);
+  assert.match(ko, /data-share-title="쉼의 자리"/);
   assert.match(ko, /href="\?lang=en"/);
   const fallback = await (await fetch(`${base}/columns/rest`)).text();
   assert.match(fallback, /English body/);
