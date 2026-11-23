@@ -603,7 +603,15 @@ test('article storage failures return an error response', async (t) => {
 for (const viewport of ['desktop', 'mobile']) {
   test(`liking and unliking an article keeps the ${viewport} page in place`, async () => {
     const source = await fs.readFile(new URL('../public/scripts/column-comment.js', import.meta.url), 'utf8');
-    const status = { textContent: '' };
+    let toastResets = 0;
+    const status = {
+      textContent: '',
+      get offsetWidth() {
+        assert.equal(this.textContent, '');
+        toastResets++;
+        return 0;
+      },
+    };
     const label = { children: [{ textContent: 'Like' }, { textContent: '좋아요' }] };
     const count = { textContent: '4', setAttribute(name, value) { this[name] = value; } };
     const classes = new Set();
@@ -661,7 +669,7 @@ for (const viewport of ['desktop', 'mobile']) {
     assert.equal(count['aria-label'], 'Likes · 좋아요 수: 7');
     assert.match(status.textContent, /^Article liked\./);
     assert.doesNotMatch(status.textContent, /Thank you/);
-    assert.equal([...timers.values()][0].delay, 5000);
+    assert.equal([...timers.values()][0].delay, 3100);
     assert.ok(classes.has('like-pop'));
     result = { liked: false, likes: 6 };
     await submit({ preventDefault() {} });
@@ -671,12 +679,13 @@ for (const viewport of ['desktop', 'mobile']) {
     assert.deepEqual(label.children.map((child) => child.textContent), ['Like', '좋아요']);
     assert.equal(count.textContent, '6');
     assert.match(status.textContent, /^Like removed\./);
+    assert.equal(toastResets, 2);
     assert.deepEqual([...classes], ['like-deflate']);
     result = { liked: 'bad', likes: -1 };
     await submit({ preventDefault() {} });
     assert.match(status.textContent, /reload the page/i);
     assert.equal(timers.size, 1);
-    assert.equal([...timers.values()][0].delay, 8000);
+    assert.equal([...timers.values()][0].delay, 3100);
     assert.equal(button.disabled, false);
     assert.equal(count.textContent, '6');
     let release;
@@ -734,6 +743,13 @@ for (const viewport of ['desktop', 'mobile']) {
     assert.equal(resets, 1);
   });
 }
+
+test('toast fade timing and reduced motion preserve the 3.1-second lifetime', async () => {
+  const styles = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  assert.match(styles, /\.column-toast:has\(\[data-toast-message\]:not\(:empty\)\) \{ animation: toast-fade 2\.1s linear 1s forwards; \}/);
+  assert.match(styles, /@keyframes toast-fade \{ from \{ opacity: 1; \} to \{ opacity: 0; \} \}/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{\s*\.column-toast:has\(\[data-toast-message\]:not\(:empty\)\) \{ animation: toast-fade 3\.1s steps\(1, end\) forwards !important; \}/);
+});
 const secrets = new Map();
 const lastSteps = new Map();
 const cookieOf = (res) => res.headers.get('set-cookie').split(';')[0];
