@@ -22,7 +22,7 @@ Immanuel Church of America (미주임마누엘교회) website. Node (ESM) + Expr
 - `.github/skills/instagram-post/SKILL.md` — authoritative assistant workflow and art direction for sermon Instagram posts. Verify linked metadata or preserve user-provided metadata, preserve existing files, and never invent translations or sermon content.
 - A direct sermon-post request authorizes one credit-consuming custom background per post; do not ask again for that workflow. Other credit-consuming image generation still requires explicit approval. Do not send sermon titles, speaker names, Scripture references, full descriptions, previous sermon metadata, or code to image services.
 - Instagram-specific artwork tokens in `public/styles.css` do not change the website's global colors. Both procedural and supplied-artwork slides use the same measured text layout; follow the skill's readability and visual-inspection requirements.
-- `public/scripts/` — page-specific browser behavior, separate from server-rendered templates. `sermon-sharing.js` handles article and sermon sharing and displays a check mark when a link is copied.
+- `public/scripts/` — page-specific browser behavior, separate from server-rendered templates. `sermon-sharing.js` handles article and sermon sharing and displays a check mark when a link is copied. `column-scroll.js` controls the article jump-to-top button with reduced-motion support.
 - `public/styles.css` — the single stylesheet and all design tokens.
 - `tests/` — `node --test` end-to-end tests.
 
