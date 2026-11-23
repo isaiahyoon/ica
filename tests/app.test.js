@@ -1291,6 +1291,7 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(home, /<meta name="twitter:card" content="summary_large_image">/);
   assert.match(home, /<meta name="twitter:image" content="https:\/\/immanuelchurchofamerica\.org\/link-preview\.png">/);
   assert.match(home, /<link rel="canonical" href="https:\/\/immanuelchurchofamerica\.org\/">/);
+  assert.match(home, /하나님의 말씀 안에 모인 가족 공동체입니다/);
   const preview = await fetch(`${base}/link-preview.png`);
   assert.equal(preview.status, 200);
   assert.match(preview.headers.get('content-type'), /image\/png/);
@@ -1318,6 +1319,9 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(aboutHtml, /<meta property="og:url" content="https:\/\/immanuelchurchofamerica\.org\/about">/);
   assert.match(aboutHtml, /<link rel="canonical" href="https:\/\/immanuelchurchofamerica\.org\/about">/);
   assert.match(aboutHtml, /<h1>.*About.*소개.*<\/h1>/s);
+  assert.match(aboutHtml, /하나님의 말씀 안에 모인 가족 같은 교회입니다/);
+  assert.match(aboutHtml, /있는 모습 그대로 환영합니다/);
+  assert.doesNotMatch(aboutHtml, /내 모슴|말씀안에/);
   for (const detail of [
     'We are a family church.', 'Our preaching is biblically sound.',
     'This church expounds Scripture verse by verse in its original-language context, proclaiming the Word of God.', '본 교회는 원어 중심으로 성경을 한 구절씩 차례대로 강해하여 하나님의 말씀을 선포합니다.',
@@ -1982,7 +1986,7 @@ test('sermon fields preserve line breaks and service through upload and editing'
     assert.match(admin, new RegExp(`<textarea name="${name}"`));
   }
   const services = [
-    'Sunday 1st Service 주일 1부 예베', 'Sunday 2nd Service 주일 2부 예배',
+    'Sunday 1st Service 주일 1부 예배', 'Sunday 2nd Service 주일 2부 예배',
     'Sunday 3rd Service 주일 3부 예배',
     'Wednesday Service 수요예배', 'Friday Service 금요예배',
   ];
