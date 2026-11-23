@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { runInNewContext } from 'node:vm';
+import { createContext, runInContext, runInNewContext } from 'node:vm';
 import { createApp } from '../server.js';
 import * as totp from '../lib/totp.js';
 import sharp from 'sharp';
@@ -432,7 +432,7 @@ test('article language preference preserves explicit links', async () => {
   assert.equal(execute('https://example.com/articles/rest?lang=en', ['ko']), '');
 });
 
-test('article comment dates use the US Pacific calendar date', async (t) => {
+test('article comments show Pacific dates and times to readers and admins', async (t) => {
   const { base, dataDir, close } = await boot();
   t.after(close);
   await fs.mkdir(dataDir, { recursive: true });
@@ -443,13 +443,68 @@ test('article comment dates use the US Pacific calendar date', async (t) => {
     id: 'article1', likes: [], comments: [{
       id: 'comment1', name: 'Isaiah', text: 'Interesting.', approved: true,
       createdAt: '2026-11-23T07:30:00.000Z',
+    }, {
+      id: 'comment2', name: 'Reader', text: 'Summer.', approved: true,
+      createdAt: '2026-07-01T19:05:00.000Z',
     }],
   }]));
 
   const html = await (await fetch(`${base}/articles/rest?lang=en`)).text();
-  assert.match(html, /<time datetime="2026-11-22">November 22, 2026 · 2026년 11월 22일<\/time>/);
+  assert.match(html, /<time datetime="2026-11-23T07:30:00\.000Z">November 22, 2026, 11:30 PM PST/);
+  assert.match(html, /<time datetime="2026-07-01T19:05:00\.000Z">July 1, 2026, 12:05 PM PDT/);
+  const cookie = await login(base);
+  const moderation = await (await fetch(`${base}/admin/articles/comments`, { headers: { cookie } })).text();
+  assert.match(moderation, /November 22, 2026, 11:30 PM PST/);
+  assert.match(moderation, /July 1, 2026, 12:05 PM PDT/);
   assert.equal(pacificDate('2026-11-23T07:30:00.000Z'), '2026-11-22');
   assert.equal(formatDate('2026-11-22', 'en-US'), 'November 22, 2026');
+});
+
+test('admin like notifications count new likes and can be safely marked read', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'columns.json'), JSON.stringify([{
+    id: 'article1', slug: 'rest', titleEn: 'Rest & peace', bodyEn: 'Text',
+  }]));
+  await fs.writeFile(path.join(dataDir, 'column-engagement.json'), JSON.stringify([{
+    id: 'article1', likes: ['legacy-like'], comments: [],
+  }]));
+  const adminCookie = await login(base);
+  const adminToken = await csrfToken(base, adminCookie);
+  const adminPage = async (route = '/admin') => (await (await fetch(base + route, { headers: { cookie: adminCookie } })).text());
+  assert.doesNotMatch(await adminPage(), /new likes? on/);
+  const readerResponse = await fetch(`${base}/articles/rest?lang=en`);
+  const reader = readerResponse.headers.get('set-cookie').split(';')[0];
+  const readerToken = (await readerResponse.text()).match(/name="_reader" value="([^"]+)"/)[1];
+  const like = (action) => fetch(`${base}/articles/rest/like`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie: reader },
+    body: new URLSearchParams({ _reader: readerToken, like_action: action }),
+  });
+  assert.equal((await like('like')).status, 302);
+  assert.equal((await like('like')).status, 302);
+  for (const route of ['/admin', '/admin/articles']) {
+    const page = await adminPage(route);
+    assert.match(page, /1 new like on/);
+    assert.match(page, /Rest &amp; peace/);
+    assert.match(page, /name="through" value="1"/);
+  }
+  assert.equal((await like('unlike')).status, 302);
+  assert.equal((await like('like')).status, 302);
+  assert.match(await adminPage(), /2 new likes on/);
+  const markRead = (through, csrf = adminToken, origin = base, cookie = adminCookie) => fetch(`${base}/admin/articles/article1/likes/read`, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), origin, cookie },
+    body: new URLSearchParams({ _csrf: csrf, through }),
+  });
+  assert.equal((await markRead('1', 'bad')).status, 403);
+  assert.equal((await markRead('1', adminToken, 'https://other.example')).status, 403);
+  assert.equal((await markRead('1', adminToken, base, '')).status, 302);
+  assert.equal((await markRead('invalid')).status, 400);
+  assert.equal((await markRead('1')).status, 302);
+  assert.equal((await markRead('1')).status, 302);
+  assert.match(await adminPage(), /1 new like on/);
+  assert.equal((await markRead('2')).status, 302);
+  assert.doesNotMatch(await adminPage(), /new likes? on/);
 });
 
 for (const viewport of ['desktop', 'mobile']) {
@@ -557,6 +612,8 @@ test('article likes and comments require verification and admin moderation', asy
   const token = page.match(/name="_reader" value="([^"]+)"/)[1];
   assert.ok(page.indexOf('class="column-footer"') < page.indexOf('id="article-engagement"'));
   assert.match(page, /class="column-response-link" href="#article-comments"/);
+  assert.ok(page.indexOf('/scripts/column-scroll.js') < page.indexOf('/scripts/column-comment.js'));
+  assert.match(page, /<h2><span class="bilingual"><span lang="en">Comments <span class="column-comment-count">0<\/span><\/span><span lang="ko">댓글<\/span><\/span><\/h2>/);
   assert.match(page, /class="column-toast" data-column-toast role="status" aria-live="polite"/);
   assert.match(page, /class="toast-bear"[^>]*aria-hidden="true"/);
   assert.match(page, /<span data-toast-message>/);
@@ -576,7 +633,7 @@ test('article likes and comments require verification and admin moderation', asy
   assert.match((await post('/columns/rest/like', { like_action: 'like' })).headers.get('location'), /status=liked/);
   assert.equal((await post('/columns/rest/like', { like_action: 'like' })).status, 302);
   let html = await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text();
-  assert.match(html, /name="like_action" value="unlike"[\s\S]*aria-pressed="true"[\s\S]*Liked[\s\S]*좋아요 수: 1">1/);
+  assert.match(html, /name="like_action" value="unlike"[\s\S]*aria-pressed="true"[\s\S]*>Like<\/span>[\s\S]*좋아요 수: 1">1/);
   const secondResponse = await fetch(`${base}/articles/rest?lang=en`);
   const secondReader = secondResponse.headers.get('set-cookie').split(';')[0];
   const secondToken = (await secondResponse.text()).match(/name="_reader" value="([^"]+)"/)[1];
@@ -619,11 +676,24 @@ test('article likes and comments require verification and admin moderation', asy
     const dashboard = await (await fetch(base + route, { headers: { cookie: adminCookie } })).text();
     assert.doesNotMatch(dashboard, /comment is awaiting review/);
   }
+  const adminPost = (action, csrf = adminToken) => fetch(base + action, {
+    method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie: adminCookie },
+    body: new URLSearchParams({ _csrf: csrf }),
+  });
+  assert.equal((await adminPost(action.replace(/\/approve$/, '/delete'))).status, 302);
+  let deletedModeration = await (await fetch(`${base}/admin/articles/comments`, { headers: { cookie: adminCookie } })).text();
+  assert.match(deletedModeration, /Deleted comments/);
+  assert.match(deletedModeration, /Restore/);
+  assert.doesNotMatch(await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text(), /&lt;script&gt;hello&lt;\/script&gt;/);
+  const approvedRestore = deletedModeration.match(/action="([^"]+\/restore)"/)[1];
+  assert.equal((await adminPost(approvedRestore, 'bad')).status, 403);
+  assert.equal((await adminPost(approvedRestore)).status, 302);
+  assert.equal((await adminPost(approvedRestore)).status, 409);
   html = await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text();
   assert.match(html, /<ol class="column-comments">/);
   assert.ok(html.indexOf('class="column-response"') < html.indexOf('<ol class="column-comments">'));
   assert.match(html, /&lt;Reader&gt;/);
-  assert.match(html, /class="column-comment-byline"><strong>&lt;Reader&gt;<\/strong><time datetime="\d{4}-\d{2}-\d{2}">/);
+  assert.match(html, /class="column-comment-byline"><strong>&lt;Reader&gt;<\/strong><time datetime="\d{4}-\d{2}-\d{2}T/);
   assert.match(html, /&lt;script&gt;hello&lt;\/script&gt;/);
   assert.doesNotMatch(html, /private@example\.com|<script>hello|data-format=/);
   assert.equal((await post('/columns/rest/comments', { name: 'Another reader', comment: 'A second comment' })).status, 302);
@@ -631,12 +701,21 @@ test('article likes and comments require verification and admin moderation', asy
   const pending = await (await fetch(`${base}/admin`, { headers: { cookie: adminCookie } })).text();
   assert.match(pending, /2 comments are awaiting review/);
   const review = await (await fetch(`${base}/admin/articles/comments`, { headers: { cookie: adminCookie } })).text();
+  const pendingDelete = [...review.matchAll(/<article class="admin-column-comment">([\s\S]*?)<\/article>/g)]
+    .find(([, card]) => card.includes('Another reader'))[1]
+    .match(/action="([^"]+\/delete)"/)[1];
   for (const [, deleteAction] of review.matchAll(/action="([^"]+\/delete)"/g)) {
-    assert.equal((await fetch(base + deleteAction, {
-      method: 'POST', redirect: 'manual', headers: { ...FORM(base), cookie: adminCookie },
-      body: new URLSearchParams({ _csrf: adminToken }),
-    })).status, 302);
+    assert.equal((await adminPost(deleteAction)).status, 302);
   }
+  deletedModeration = await (await fetch(`${base}/admin/articles/comments`, { headers: { cookie: adminCookie } })).text();
+  const pendingCommentId = pendingDelete.match(/\/([^/]+)\/delete$/)[1];
+  const pendingRestore = [...deletedModeration.matchAll(/action="([^"]+\/restore)"/g)]
+    .map(([, actionPath]) => actionPath)
+    .find((actionPath) => actionPath.endsWith(`/${pendingCommentId}/restore`));
+  assert.equal((await adminPost(pendingRestore)).status, 302);
+  assert.match(await (await fetch(`${base}/admin`, { headers: { cookie: adminCookie } })).text(), /1 comment is awaiting review/);
+  assert.doesNotMatch(await (await fetch(`${base}/columns/rest?lang=en`, { headers: { cookie: reader } })).text(), /A second comment/);
+  assert.equal((await adminPost(pendingRestore.replace(/\/restore$/, '/delete'))).status, 302);
   assert.doesNotMatch(await (await fetch(`${base}/admin`, { headers: { cookie: adminCookie } })).text(), /awaiting review/);
 });
 
@@ -687,6 +766,7 @@ test('article storage failures return an error response', async (t) => {
 for (const viewport of ['desktop', 'mobile']) {
   test(`liking and unliking an article keeps the ${viewport} page in place`, async () => {
     const source = await fs.readFile(new URL('../public/scripts/column-comment.js', import.meta.url), 'utf8');
+    const scrollSource = await fs.readFile(new URL('../public/scripts/column-scroll.js', import.meta.url), 'utf8');
     let toastResets = 0;
     const status = {
       textContent: '',
@@ -716,18 +796,23 @@ for (const viewport of ['desktop', 'mobile']) {
       querySelector: (selector) => selector === '[name="like_action"]' ? action : button,
       addEventListener: (_name, handler) => { submit = handler; },
     };
-    const window = { location: { origin: 'https://example.com', href: 'https://example.com/articles/rest?lang=en#article-body' } };
+    const window = {
+      location: { origin: 'https://example.com', href: 'https://example.com/articles/rest?lang=en#article-body' },
+      scrollY: viewport === 'desktop' ? 640 : 420,
+      matchMedia: () => ({ matches: false }),
+      addEventListener() {},
+    };
     let request;
     let requests = 0;
     let pending;
     let timerId = 0;
     const timers = new Map();
     let result = { liked: true, likes: 7 };
-    runInNewContext(source, {
+    const context = createContext({
       document: { querySelector: (selector) => selector === '[data-toast-message]' ? status : selector === '.column-comment-form' ? {
         querySelector: () => ({ textContent: '', disabled: false }),
         addEventListener() {},
-      } : form },
+      } : selector === '.column-scroll-top' ? { addEventListener() {} } : form },
       window, URL, URLSearchParams,
       setTimeout: (callback, delay) => { const id = ++timerId; timers.set(id, { callback, delay }); return id; },
       clearTimeout: (id) => timers.delete(id),
@@ -739,21 +824,24 @@ for (const viewport of ['desktop', 'mobile']) {
         return { ok: true, json: async () => result };
       },
     });
+    runInContext(scrollSource, context);
+    runInContext(source, context);
     let prevented = false;
     await submit({ preventDefault() { prevented = true; } });
     assert.equal(prevented, true);
     assert.equal(request.method, 'POST');
     assert.equal(request.credentials, 'same-origin');
     assert.equal(window.location.href, 'https://example.com/articles/rest?lang=en#article-body');
+    assert.equal(window.scrollY, viewport === 'desktop' ? 640 : 420);
     assert.equal(request.body.get('like_action'), 'like');
     assert.equal(button.disabled, false);
     assert.equal(button['aria-pressed'], 'true');
-    assert.deepEqual(label.children.map((child) => child.textContent), ['Liked', '좋아요 완료']);
+    assert.deepEqual(label.children.map((child) => child.textContent), ['Like', '좋아요']);
     assert.equal(count.textContent, '7');
     assert.equal(count['aria-label'], 'Likes · 좋아요 수: 7');
     assert.match(status.textContent, /^Article liked\./);
     assert.doesNotMatch(status.textContent, /Thank you/);
-    assert.equal([...timers.values()][0].delay, 3100);
+    assert.equal([...timers.values()][0].delay, 4100);
     assert.ok(classes.has('like-pop'));
     result = { liked: false, likes: 6 };
     await submit({ preventDefault() {} });
@@ -769,7 +857,7 @@ for (const viewport of ['desktop', 'mobile']) {
     await submit({ preventDefault() {} });
     assert.match(status.textContent, /reload the page/i);
     assert.equal(timers.size, 1);
-    assert.equal([...timers.values()][0].delay, 3100);
+    assert.equal([...timers.values()][0].delay, 4100);
     assert.equal(button.disabled, false);
     assert.equal(count.textContent, '6');
     let release;
@@ -828,11 +916,18 @@ for (const viewport of ['desktop', 'mobile']) {
   });
 }
 
-test('toast fade timing and reduced motion preserve the 3.1-second lifetime', async () => {
+test('toast fade timing and reduced motion preserve the 4.1-second lifetime', async () => {
   const styles = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
-  assert.match(styles, /\.column-toast:has\(\[data-toast-message\]:not\(:empty\)\) \{ animation: toast-fade 2\.1s linear 1s forwards; \}/);
+  assert.match(styles, /\.column-toast:has\(\[data-toast-message\]:not\(:empty\)\) \{ animation: toast-fade 2\.1s linear 2s forwards; \}/);
   assert.match(styles, /@keyframes toast-fade \{ from \{ opacity: 1; \} to \{ opacity: 0; \} \}/);
-  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{\s*\.column-toast:has\(\[data-toast-message\]:not\(:empty\)\) \{ animation: toast-fade 3\.1s steps\(1, end\) forwards !important; \}/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\) \{\s*\.column-toast:has\(\[data-toast-message\]:not\(:empty\)\) \{ animation: toast-fade 4\.1s steps\(1, end\) forwards !important; \}/);
+});
+
+test('article reactions and comment fields use soft styling with a visible focus treatment', async () => {
+  const styles = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  assert.match(styles, /\.column-like\[aria-pressed="true"\] svg \{ fill: var\(--pink\); \}/);
+  assert.match(styles, /\.column-comment-form input:not\(\[type="hidden"\]\), \.column-comment-form textarea \{[^}]*border-image: none; border-radius: \.8rem;/);
+  assert.match(styles, /\.column-comment-form input:not\(\[type="hidden"\]\):focus, \.column-comment-form textarea:focus \{[^}]*outline: 3px solid var\(--focus\);/);
 });
 const secrets = new Map();
 const lastSteps = new Map();
