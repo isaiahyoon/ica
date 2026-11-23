@@ -78,6 +78,65 @@ test('multiple bilingual Scripture passages link each split range without accept
   assert.match(links, /Romans 8:28/);
   assert.equal(scriptureLanguageLinks('John 3:16 (요한복음 3:17); Romans 8:28'), '');
 });
+
+test('pastors publish bilingual columns with escaped text, an image, video, and delete controls', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const admin = await (await fetch(`${base}/admin`, { headers: { cookie } })).text();
+  const token = admin.match(/name="_csrf" value="([^"]+)"/)[1];
+
+  const png = await sharp({
+    create: { width: 20, height: 20, channels: 3, background: '#223b55' },
+  }).png().toBuffer();
+  const body = new FormData();
+  body.set('_csrf', token);
+  body.set('titleEn', 'Lorem <Ipsum>');
+  body.set('titleKo', '아보트 공부');
+  body.set('excerptEn', 'A short <preview>');
+  body.set('excerptKo', '짧은 미리보기');
+  body.set('bodyEn', 'English paragraph one.\n\nEnglish paragraph two.');
+  body.set('bodyKo', '첫 번째 한국어 문단입니다.\n\n두 번째 한국어 문단입니다.');
+  body.set('videoUrl', 'https://www.youtube.com/watch?v=example');
+  body.set('date', '2026-11-22');
+  body.set('image', new Blob([png], { type: 'image/png' }), 'column.png');
+
+  const published = await fetch(`${base}/admin/columns`, {
+    method: 'POST',
+    redirect: 'manual',
+    headers: { cookie, origin: base },
+    body,
+  });
+  assert.equal(published.status, 302);
+  assert.equal(published.headers.get('location'), '/columns');
+
+  const list = await (await fetch(`${base}/columns`)).text();
+  assert.match(list, /Lorem &lt;Ipsum&gt;/);
+  assert.match(list, /아보트 공부/);
+  assert.match(list, /A short &lt;preview&gt;/);
+  assert.match(list, /columns\/lorem-ipsum/);
+
+  const article = await (await fetch(`${base}/columns/lorem-ipsum`)).text();
+  assert.match(article, /Lorem &lt;Ipsum&gt;/);
+  assert.match(article, /English paragraph one/);
+  assert.match(article, /첫 번째 한국어 문단입니다/);
+  assert.doesNotMatch(article, /Lorem <Ipsum>/);
+  assert.match(article, /href="https:\/\/www\.youtube\.com\/watch\?v=example"/);
+
+  const source = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+  assert.match(source, /\.column-card \{/);
+  assert.match(source, /@media \(max-width: 560px\)/);
+  assert.match(source, /\.column-card \{ grid-template-columns: 1fr; \}/);
+
+  const columns = JSON.parse(await fs.readFile(path.join(dataDir, 'columns.json'), 'utf8'));
+  const deleteResponse = await fetch(`${base}/admin/columns/${columns[0].id}/delete`, {
+    method: 'POST',
+    redirect: 'manual',
+    headers: { ...FORM(base), cookie },
+    body: new URLSearchParams({ _csrf: token }),
+  });
+  assert.equal(deleteResponse.status, 302);
+});
 const secrets = new Map();
 const lastSteps = new Map();
 const cookieOf = (res) => res.headers.get('set-cookie').split(';')[0];
@@ -743,6 +802,46 @@ test('gallery validates image types, sizes, session ownership, CSRF, origins, an
   assert.deepEqual(await fs.readdir(path.join(uploadDir, 'gallery-staging')), []);
 });
 
+for (const initialDesktop of [true, false]) {
+  test(`welcome actions keep ${initialDesktop ? 'desktop' : 'mobile'} layout and keyboard order aligned`, async () => {
+    const source = await fs.readFile(new URL('../public/scripts/welcome-actions.js', import.meta.url), 'utf8');
+    const css = await fs.readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+    assert.match(css, /grid-template-areas:\s*"about sermons"\s*"gallery articles"\s*"contact contact"/);
+    assert.match(css, /@media \(min-width: 681px\)\s*\{[\s\S]*?grid-template-areas:\s*"about about sermons sermons articles articles"\s*"\. gallery gallery contact contact \."/);
+    const links = {};
+    let order = ['/about', '/sermons', '/gallery', '/columns', '/contact'];
+    const document = { activeElement: null };
+    for (const href of order) {
+      links[href] = {
+        get nextElementSibling() { return links[order[order.indexOf(href) + 1]] ?? null; },
+        focus() { document.activeElement = this; },
+      };
+    }
+    const actions = {
+      querySelector(selector) { return links[selector.match(/href="([^"]+)"/)[1]]; },
+      insertBefore(first, second) {
+        if (document.activeElement === first) document.activeElement = null;
+        const from = order.find((href) => links[href] === first);
+        const to = order.find((href) => links[href] === second);
+        order = order.filter((href) => href !== from);
+        order.splice(order.indexOf(to), 0, from);
+      },
+    };
+    document.querySelector = () => actions;
+    let changed;
+    const media = { matches: initialDesktop, addEventListener(_type, callback) { changed = callback; } };
+    runInNewContext(source, { document, window: { matchMedia: () => media } });
+    const desktopOrder = ['/about', '/sermons', '/columns', '/gallery', '/contact'];
+    const mobileOrder = ['/about', '/sermons', '/gallery', '/columns', '/contact'];
+    assert.deepEqual(order, initialDesktop ? desktopOrder : mobileOrder);
+    document.activeElement = links[initialDesktop ? '/gallery' : '/columns'];
+    media.matches = !initialDesktop;
+    changed();
+    assert.deepEqual(order, initialDesktop ? mobileOrder : desktopOrder);
+    assert.equal(document.activeElement, links[initialDesktop ? '/gallery' : '/columns']);
+  });
+}
+
 test('public pages render, landing is the information page', async (t) => {
   const { base, close } = await boot();
   t.after(close);
@@ -776,10 +875,11 @@ test('public pages render, landing is the information page', async (t) => {
   assert.match(home, /<nav[^>]*>[\s\S]*href="\/contact"[\s\S]*<\/nav>/);
   assert.doesNotMatch(home, /class="scripture-picker"|class="scripture-language-links"/);
   assert.match(home, /class="btn btn-hero btn-mint" href="\/about"/);
-  const welcomeActions = home.match(/<div class="actions">([\s\S]*?)<\/div>/)[1];
+  const welcomeActions = home.match(/<div class="actions" data-welcome-actions>([\s\S]*?)<\/div>/)[1];
   assert.deepEqual([...welcomeActions.matchAll(/href="([^"]+)"/g)].map((match) => match[1]), [
-    '/about', '/sermons', '/gallery', '/contact',
+    '/about', '/sermons', '/gallery', '/columns', '/contact',
   ]);
+  assert.match(welcomeActions, /href="\/columns"><span class="bilingual"><span lang="en">Articles<\/span><span lang="ko">목회 칼럼<\/span>/);
   assert.match(welcomeActions, /href="\/gallery"><span class="bilingual"><span lang="en">Gallery<\/span><span lang="ko">갤러리<\/span>/);
   assert.match(home, /<nav[^>]*>[\s\S]*href="\/about"[\s\S]*<\/nav>/);
   const about = await fetch(`${base}/about`);

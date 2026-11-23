@@ -9,6 +9,7 @@ import { createStore } from './lib/store.js';
 import { createAdmins } from './lib/admins.js';
 import { mountAdminAuth } from './lib/admin-routes.js';
 import { mountGallery } from './lib/gallery-routes.js';
+import { mountColumns } from './lib/column-routes.js';
 import * as view from './lib/render.js';
 import { formatScriptureReference } from './lib/scripture-links.js';
 import { SERMON_SERVICE_FILTERS, sermonServiceType, splitBilingual } from './lib/sermon-metadata.js';
@@ -204,11 +205,12 @@ export function createApp({
 
   const adminView = async (req, res, status = 200, extra = {}) => {
     const sermons = await store.read('sermons');
+    const columns = await store.read('columns');
     if (auth.isOwner(req)) extra = { ...extra, admins: await admins.list() };
     res.set('Cache-Control', 'no-store');
     res.status(status).send(renderPage(req, {
       title: 'Admin', active: 'admin', admin: true,
-      body: view.adminPage({ sermons, pastors: await readPastors(), csrfToken: auth.csrfToken(req), ...extra }),
+      body: view.adminPage({ sermons, columns, pastors: await readPastors(), csrfToken: auth.csrfToken(req), ...extra }),
     }));
   };
 
@@ -246,6 +248,7 @@ export function createApp({
   });
 
   mountGallery({ app, store, uploadDir, page, renderPage });
+  mountColumns({ app, store, uploadDir, page, renderPage });
 
   // Wrap multer so upload errors (size, type) render a friendly message.
   const handleUpload = (mw) => (req, res, next) =>
