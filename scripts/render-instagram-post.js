@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { postCaption, postDetails, postHashtags, renderInstagramPost, savedSermonDate, sermonLink } from '../lib/instagram-post.js';
-import { splitBilingual } from '../lib/sermon-metadata.js';
+import { findSermonByKey, splitBilingual } from '../lib/sermon-metadata.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -92,7 +92,7 @@ export async function run(args) {
     const sermons = JSON.parse(await fs.readFile(path.join(options['--data-dir'], 'sermons.json'), 'utf8'));
     if (!Array.isArray(sermons)) throw new TypeError('sermons.json must contain an array.');
     entries = parsed.map((link) => {
-      const sermon = sermons.find((item) => item.id?.toLowerCase() === link.id);
+      const sermon = sermons.find((item) => item.id?.toLowerCase() === link.id) || findSermonByKey(sermons, link.id);
       if (!sermon) throw new Error(`Sermon ${link.id} is not in the local store. Use --input with metadata verified from the linked page.`);
       return { ...sermon, url: link.url };
     });

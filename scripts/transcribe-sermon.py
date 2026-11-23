@@ -78,7 +78,7 @@ def resolve_source(source, directory, cafile=None):
         return audio, audio.stem
 
     parsed = church_url(source)
-    if not re.fullmatch(r"/sermons/[0-9a-fA-F-]{36}", parsed.path):
+    if not re.fullmatch(r"/sermons/(?:[0-9a-fA-F-]{36}|[0-9]{8}(?:_[123])?)", parsed.path):
         raise ValueError("Provide an individual church sermon link, not a listing page.")
     page = directory / "sermon.html"
     download(source, page, 1024 * 1024, cafile=cafile)

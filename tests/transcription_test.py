@@ -64,6 +64,24 @@ class TranscriptionTests(unittest.TestCase):
                 tool.MAX_AUDIO_BYTES,
             ))
 
+    def test_date_sermon_links_and_invalid_suffix(self):
+        audio_id = "c0b868fd-7301-4865-adac-f41f1f0fcb5e"
+
+        def download(source, destination, limit, cafile=None):
+            if destination.suffix == ".html":
+                destination.write_text(f'<audio src="/uploads/audio/{audio_id}.m4a"></audio>')
+            else:
+                destination.write_bytes(b"audio")
+
+        with tempfile.TemporaryDirectory() as temporary, patch.object(tool, "download", download):
+            for key in ("20261122", "20261122_1", "20261122_2", "20261122_3"):
+                with self.subTest(key=key):
+                    audio, name = tool.resolve_source(f"https://{tool.CHURCH_HOST}/sermons/{key}", Path(temporary))
+                    self.assertEqual(name, key)
+                    self.assertEqual(audio.read_bytes(), b"audio")
+            with self.assertRaises(ValueError):
+                tool.resolve_source(f"https://{tool.CHURCH_HOST}/sermons/20261122_4", Path(temporary))
+
     def test_rejects_other_hosts_http_and_external_redirects(self):
         for url in (
             "https://example.com/sermons/id",

@@ -31,9 +31,12 @@ test('sermon links accept church and local URLs, discard query/hash, and reject 
   assert.equal(sermonLink(`http://localhost:1234/sermons/${id}`).id, id);
   assert.equal(sermonLink(`http://127.0.0.1:1234/sermons/${id}`).id, id);
   assert.equal(sermonLink(`http://[::1]:1234/sermons/${id}`).id, id);
+  for (const key of ['20261108', '20261108_1', '20261108_2', '20261108_3']) {
+    assert.equal(sermonLink(`https://immanuelchurchofamerica.org/sermons/${key}`).id, key);
+  }
   for (const url of ['https://example.org/sermons/' + id, 'http://immanuelchurchofamerica.org/sermons/' + id,
     'https://immanuelchurchofamerica.org:8443/sermons/' + id, 'https://user:pass@immanuelchurchofamerica.org/sermons/' + id,
-    'https://immanuelchurchofamerica.org/sermons', sermon.url + '/preview.png', 'not a URL']) {
+    'https://immanuelchurchofamerica.org/sermons', 'https://immanuelchurchofamerica.org/sermons/20261108_4', sermon.url + '/preview.png', 'not a URL']) {
     assert.throws(() => sermonLink(url), { name: 'TypeError' });
   }
 });
@@ -342,11 +345,15 @@ test('parallel generations reserve distinct flat filenames without overwriting',
 });
 test('local CLI resolves saved sermon links and supports verified JSON with custom per-sermon tags', async (t) => {
   const directory = await temporary(t);
-  await fs.writeFile(path.join(directory, 'sermons.json'), JSON.stringify([sermon]));
+  await fs.writeFile(path.join(directory, 'sermons.json'), JSON.stringify([{ ...sermon, slugAliases: ['20261101_2'] }]));
   const output = path.join(directory, 'output');
   const saved = await run(['--data-dir', directory, '--output', output, sermon.url]);
   assert.equal(saved.length, 1);
   assert.equal(saved[0].caption, postCaption(sermon.description));
+  for (const key of ['20261108_2', '20261101_2']) {
+    const [post] = await run(['--data-dir', directory, '--output', output, sermon.url.replace(id, key)]);
+    assert.equal(post.caption, postCaption(sermon.description));
+  }
   assert.deepEqual(saved[0].hashtags, postHashtags(sermon.hashtags));
   const input = path.join(directory, 'input.json');
   await fs.writeFile(input, JSON.stringify([{ ...sermon, hashtags: ['Faith', '복음', 'Scripture'] }]));

@@ -58,7 +58,7 @@ test('pastor list is persistent and removal leaves saved sermons unchanged', asy
   await fs.writeFile(path.join(dataDir, 'sermons.json'), JSON.stringify(saved));
   const scripture = Array(3).fill('John 3:16, 18-20 (요한복음 3:16, 18-20); Romans 8:28 (로마서 8:28)').join('; ');
   assert.ok(scripture.length > 100);
-  assert.equal((await post('/admin/sermons/existing/edit', { title: 'Saved', speakerEn: list[1].en, speakerKo: list[1].ko, scripture })).status, 302);
+  assert.equal((await post('/admin/sermons/existing/edit', { title: 'Saved', date: '2026-01-02', service: 'Friday Service 금요예배', speakerEn: list[1].en, speakerKo: list[1].ko, scripture })).status, 302);
   saved[0] = JSON.parse(await fs.readFile(path.join(dataDir, 'sermons.json'), 'utf8'))[0];
   assert.equal(saved[0].scripture, scripture);
   assert.equal((await post(`/admin/pastors/${list[1].id}/delete`, {})).status, 302);
@@ -1834,6 +1834,76 @@ test('sermon title links preserve heading styling until hover', async () => {
   assert.match(css, /\.sermon h3 a:hover\s*\{[^}]*text-decoration:\s*underline/s);
 });
 
+test('sermon date URLs validate fields, reject conflicts, and preserve old links', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  const cookie = await login(base);
+  const csrf = await csrfToken(base, cookie);
+  const admin = await (await fetch(`${base}/admin/sermons`, { headers: { cookie } })).text();
+  assert.match(admin, /<input[^>]*name="date"[^>]*required/);
+  assert.match(admin, /<select[^>]*name="service"[^>]*required/);
+  const upload = (date, service) => {
+    const body = new FormData();
+    for (const [key, value] of Object.entries({ _csrf: csrf, title: 'Sermon', date, service })) body.set(key, value);
+    body.set('audio', new Blob(['audio'], { type: 'audio/mpeg' }), 'sermon.mp3');
+    return fetch(`${base}/admin/sermons`, { method: 'POST', body, headers: { cookie, origin: base }, redirect: 'manual' });
+  };
+  for (const [date, service] of [['', 'Friday Service'], ['2026-02-30', 'Friday Service'], ['2026-11-22', '']]) {
+    assert.equal((await upload(date, service)).status, 400);
+  }
+  for (const [date, service, key] of [
+    ['2026-11-22', 'Sunday 1st Service 주일 1부 예베', '20261122_1'],
+    ['2026-11-22', '주일 2부 예배', '20261122_2'],
+    ['2026-11-22', 'Sunday 3rd Service', '20261122_3'],
+    ['2026-11-18', 'Wednesday Service 수요예배', '20261118'],
+    ['2026-11-20', 'Friday Service 금요예배', '20261120'],
+  ]) {
+    assert.equal((await upload(date, service)).status, 302);
+    assert.equal((await fetch(`${base}/sermons/${key}`)).status, 200);
+  }
+  const [a, b] = await Promise.all([upload('2026-11-25', 'Wednesday Service'), upload('2026-11-25', 'Wednesday Service')]);
+  assert.deepEqual([a.status, b.status].sort(), [302, 409]);
+  assert.equal((await upload('2026-11-22', 'Sunday 1st Service')).status, 409);
+  const records = JSON.parse(await fs.readFile(path.join(dataDir, 'sermons.json'), 'utf8'));
+  const first = records.find((item) => item.slug === '20261122_1');
+  const old = await fetch(`${base}/sermons/${first.id}?share=1`, { redirect: 'manual' });
+  assert.equal(old.status, 301);
+  assert.equal(old.headers.get('location'), '/sermons/20261122_1?share=1');
+  const preview = await fetch(`${base}/sermons/${first.id}/preview.png?v=123`, { redirect: 'manual' });
+  assert.equal(preview.headers.get('location'), '/sermons/20261122_1/preview.png?v=123');
+  const edit = (values) => fetch(`${base}/admin/sermons/${first.id}/edit`, {
+    method: 'POST', headers: { ...FORM(base), cookie }, redirect: 'manual',
+    body: new URLSearchParams({ _csrf: csrf, title: 'Sermon', date: '2026-11-29', service: 'Sunday 1st Service', ...values }),
+  });
+  assert.equal((await edit({ date: '' })).status, 400);
+  assert.equal((await edit({ service: '' })).status, 400);
+  assert.equal((await edit({ date: '2026-11-22', service: 'Sunday 2nd Service' })).status, 409);
+  assert.equal((await edit({})).status, 302);
+  assert.equal((await fetch(`${base}/sermons/20261122_1`, { redirect: 'manual' })).headers.get('location'), '/sermons/20261129_1');
+  assert.equal((await upload('2026-11-22', 'Sunday 1st Service')).status, 409);
+  const detail = await (await fetch(`${base}/sermons/20261129_1`, { headers: { cookie } })).text();
+  assert.match(detail, /<input[^>]*name="date"[^>]*required/);
+  assert.match(detail, /<select[^>]*name="service"[^>]*required/);
+  assert.match(detail, /og:url" content="https:\/\/immanuelchurchofamerica.org\/sermons\/20261129_1"/);
+  assert.match(detail, /\/sermons\/20261129_1\/preview\.png\?v=/);
+});
+
+test('ambiguous and incomplete legacy sermon links never resolve to the wrong record', async (t) => {
+  const { base, dataDir, close } = await boot();
+  t.after(close);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(path.join(dataDir, 'sermons.json'), JSON.stringify([
+    { id: 'legacy-a', title: 'A', date: '2026-11-18', service: 'Wednesday Service' },
+    { id: 'legacy-b', title: 'B', date: '2026-11-18', service: 'Wednesday Service' },
+    { id: 'legacy-c', title: 'C', date: '2026-11-19', service: '' },
+  ]));
+  assert.equal((await fetch(`${base}/sermons/20261118`)).status, 404);
+  for (const id of ['legacy-a', 'legacy-b', 'legacy-c']) {
+    const response = await fetch(`${base}/sermons/${id}`, { redirect: 'manual' });
+    assert.equal(response.status, 200);
+  }
+});
+
 test('sermon fields preserve line breaks and service through upload and editing', async (t) => {
   const { base, dataDir, close } = await boot();
   t.after(close);
@@ -1868,7 +1938,7 @@ test('sermon fields preserve line breaks and service through upload and editing'
   for (const [name, value] of Object.entries(fields)) assert.equal(stored[name].replaceAll('\r\n', '\n'), value);
   for (const url of ['/sermons', `/sermons/${stored.id}`]) {
     const html = (await (await fetch(base + url)).text()).replaceAll('\r\n', '\n');
-    assert.ok(html.includes(`<h3 lang="ko"><a href="/sermons/${stored.id}">Title &lt;one&gt;\n제목</a></h3>`));
+    assert.ok(html.includes(`<h3 lang="ko"><a href="/sermons/20261108">Title &lt;one&gt;\n제목</a></h3>`));
     assert.match(html, /<span class="sermon-meta-line" lang="en"><span>Speaker\nName<\/span> · <span>Sunday service<\/span> · <span>November 8, 2026<\/span><\/span>/);
     assert.match(html, /<span class="sermon-meta-line" lang="ko"><span>설교자\n이름<\/span> · <span>주일 예배<\/span> · <span>2026년 11월 8일<\/span><\/span>/);
     assert.match(html, /<summary class="scripture" lang="ko">John 12:23-26\n요한복음 12:23-26<\/summary>/);
@@ -1991,10 +2061,11 @@ test('sermon link previews use the sermon title and passage reference, not verse
     for (const attribute of ['name="description"', 'property="og:description"', 'name="twitter:description"']) {
       assert.ok(head.includes(`<meta ${attribute} content="${description}">`));
     }
-    assert.ok(head.includes(`<meta property="og:url" content="https://immanuelchurchofamerica.org/sermons/${sermon.id}">`));
-    assert.ok(head.includes(`<link rel="canonical" href="https://immanuelchurchofamerica.org/sermons/${sermon.id}">`));
+    const key = sermon.id === 'english' ? '20261108' : sermon.id;
+    assert.ok(head.includes(`<meta property="og:url" content="https://immanuelchurchofamerica.org/sermons/${key}">`));
+    assert.ok(head.includes(`<link rel="canonical" href="https://immanuelchurchofamerica.org/sermons/${key}">`));
     const imageUrl = head.match(/<meta property="og:image" content="([^"]+)">/)[1];
-    assert.match(imageUrl, new RegExp(`^https://immanuelchurchofamerica.org/sermons/${sermon.id}/preview\\.png\\?v=[a-f\\d]{20}$`));
+    assert.match(imageUrl, new RegExp(`^https://immanuelchurchofamerica.org/sermons/${key}/preview\\.png\\?v=[a-f\\d]{20}$`));
     assert.ok(head.includes(`<meta name="twitter:image" content="${imageUrl}">`));
     assert.ok(head.includes(`<meta property="og:image:alt" content="${escapeAttribute([sermon.title, displayReference, sermon.date, sermon.service].filter(Boolean).join(' · '))}">`));
     const image = await fetch(base + new URL(imageUrl).pathname + new URL(imageUrl).search);
@@ -2113,7 +2184,7 @@ test('sermon overviews accept up to 10000 characters on upload and edit', async 
 
   const upload = new FormData();
   for (const [name, value] of Object.entries({
-    title: 'Long overview', speakerEn: '', speakerKo: '', service: '', date: '', scripture: '', description: overview,
+    title: 'Long overview', speakerEn: '', speakerKo: '', service: 'Wednesday Service 수요예배', date: '2026-11-18', scripture: '', description: overview,
   })) upload.set(name, value);
   upload.set('_csrf', csrf);
   upload.set('audio', new Blob(['audio'], { type: 'audio/mpeg' }), 'sermon.mp3');
@@ -2128,7 +2199,7 @@ test('sermon overviews accept up to 10000 characters on upload and edit', async 
   const edit = await fetch(`${base}/admin/sermons/${created.id}/edit`, {
     method: 'POST', headers: { ...FORM(base), cookie }, redirect: 'manual',
     body: new URLSearchParams({
-      _csrf: csrf, title: created.title, speakerEn: '', speakerKo: '', service: '', date: '',
+      _csrf: csrf, title: created.title, speakerEn: '', speakerKo: '', service: 'Wednesday Service 수요예배', date: '2026-11-18',
       scripture: '', description: editedOverview,
     }),
   });
@@ -2227,6 +2298,7 @@ test('admin can upload, list and delete sermon audio', async (t) => {
   s.set('_csrf', csrf);
   s.set('title', '<b>Grace</b>'); s.set('speaker', 'Pastor');
   s.set('service', 'Sunday 1st Service 주일 1부 예베');
+  s.set('date', '2026-11-22');
   s.set('audio', new Blob([new Uint8Array([1, 2, 3])], { type: 'audio/mpeg' }), 'a.mp3');
   const noCsrf = new FormData();
   noCsrf.set('title', 'Rejected');
@@ -2245,7 +2317,7 @@ test('admin can upload, list and delete sermon audio', async (t) => {
   const [uploadedSermon] = JSON.parse(await fs.readFile(path.join(dataDir, 'sermons.json'), 'utf8'));
   assert.equal(uploadedSermon.service, 'Sunday 1st Service 주일 1부 예베');
   const sid = sermons.match(/id="sermon-([^"]+)"/)[1];
-  assert.match(sermons, new RegExp(`href="/sermons/${sid}"`));
+  assert.match(sermons, /href="\/sermons\/20261122_1"/);
   assert.equal((await fetch(`${base}/sermons/${sid}`)).status, 200);
   const src = sermons.match(/src="(\/uploads\/audio\/[^"]+)"/)[1];
   assert.equal((await fetch(base + src)).status, 200);
@@ -2256,14 +2328,14 @@ test('admin can upload, list and delete sermon audio', async (t) => {
   assert.match(await replacementControls, /Replace this sermon’s audio\?/);
 
   assert.doesNotMatch(sermons, /\/edit/);
-  const sedit = (fields) => fetch(`${base}/admin/sermons/${sid}/edit`, { method: 'POST', body: new URLSearchParams({ _csrf: csrf, ...fields }), headers: { cookie, origin: base }, redirect: 'manual' });
+  const sedit = (fields) => fetch(`${base}/admin/sermons/${sid}/edit`, { method: 'POST', body: new URLSearchParams({ _csrf: csrf, date: '2001-02-03', service: 'Friday Service 금요예배', ...fields }), headers: { cookie, origin: base }, redirect: 'manual' });
   assert.equal((await sedit({ title: 'Renamed <b>', speaker: 'Pastor Kim', date: '2001-02-03' })).status, 302);
   const renamed = await (await fetch(`${base}/sermons`, { headers: { cookie } })).text();
   assert.match(renamed, /Renamed &lt;b&gt;/);
   assert.match(renamed, /Pastor Kim/);
   assert.equal((await sedit({ title: '은혜', scripture: '요한복음 3:16' })).status, 302);
   const koreanSermon = await (await fetch(`${base}/sermons`)).text();
-  assert.ok(koreanSermon.includes(`<h3 lang="ko"><a href="/sermons/${sid}">은혜</a></h3>`));
+  assert.ok(koreanSermon.includes(`<h3 lang="ko"><a href="/sermons/20010203">은혜</a></h3>`));
   assert.match(koreanSermon, /<summary class="scripture" lang="ko">요한복음 3:16<\/summary>/);
   assert.equal((await sedit({ title: '' })).status, 400);
   assert.equal((await fetch(`${base}/admin/sermons/nope/edit`, { method: 'POST', body: new URLSearchParams({ _csrf: csrf, title: 'x' }), headers: { cookie, origin: base }, redirect: 'manual' })).status, 404);
@@ -2293,7 +2365,7 @@ test('admin can upload, list and delete sermon audio', async (t) => {
     body: new URLSearchParams({ _csrf: csrf, stagedAudio: replacementId }), redirect: 'manual',
   });
   assert.equal(replaced.status, 302);
-  assert.equal(replaced.headers.get('location'), `/sermons/${sid}`);
+  assert.equal(replaced.headers.get('location'), '/sermons/20010203');
   assert.equal((await fetch(base + src)).status, 404);
   assert.equal(await (await fetch(`${base}/uploads/audio/${replacementId}`)).text(), 'trimmed sermon audio');
   const storedSermons = JSON.parse(await fs.readFile(path.join(dataDir, 'sermons.json'), 'utf8'));
@@ -2381,6 +2453,8 @@ test('admin can stage audio immediately and publish it with sermon details', asy
   otherPublish.set('_csrf', otherCsrf);
   otherPublish.set('stagedAudio', uploadId);
   otherPublish.set('title', 'Unauthorized publish');
+  otherPublish.set('date', '2026-11-18');
+  otherPublish.set('service', 'Wednesday Service 수요예배');
   const otherResult = await fetch(`${base}/admin/sermons`, {
     method: 'POST', body: otherPublish, headers: { cookie: otherCookie, origin: base }, redirect: 'manual',
   });
@@ -2391,6 +2465,8 @@ test('admin can stage audio immediately and publish it with sermon details', asy
   publish.set('_csrf', csrf);
   publish.set('stagedAudio', uploadId);
   publish.set('title', 'Song of Songs');
+  publish.set('date', '2026-11-18');
+  publish.set('service', 'Wednesday Service 수요예배');
   publish.set('speaker', 'Pastor');
   publish.set('scripture', 'Song of Songs');
   const result = await fetch(`${base}/admin/sermons`, {

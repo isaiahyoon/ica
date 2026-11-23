@@ -14,7 +14,7 @@ test('local transcription supports sermon links, private outputs, chunking and e
   const { stderr } = await exec('python3', [
     '-B', fileURLToPath(new URL('./transcription_test.py', import.meta.url)),
   ]);
-  assert.match(stderr, /Ran 9 tests/);
+  assert.match(stderr, /Ran \d+ tests/);
   assert.match(stderr, /\bOK\b/);
 });
 
