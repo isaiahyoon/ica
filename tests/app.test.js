@@ -176,6 +176,8 @@ test('pastors publish bilingual columns with escaped text, an image, video, and 
   assert.match(article, /<time datetime="2026-11-22">/);
   assert.match(article, /class="column-feature"[\s\S]*<img[^>]*alt="Lorem &lt;Ipsum&gt;"/);
   assert.match(article, /class="column-video-link" href="https:\/\/www\.youtube\.com\/watch\?v=example" target="_blank" rel="noopener noreferrer"/);
+  assert.match(article, /<span class="column-video-icon" aria-hidden="true"><svg viewBox="0 0 12 12" focusable="false"><path [^>]+\/><\/svg><\/span><span class="bilingual"><span lang="en">Watch video<\/span><span lang="ko">영상 보기<\/span>/);
+  assert.doesNotMatch(article, /▶/);
   const textArticle = await (await fetch(`${base}/columns/a-text-only-article`)).text();
   assert.doesNotMatch(textArticle, /class="column-feature"|class="column-video-link"|<time /);
 
@@ -1046,7 +1048,8 @@ test('admins reorder all published photos while preserving metadata, drafts, pag
   assert.equal(editor.ids.length, 27);
   assert.equal(editor.ids[0], original[26].id);
   assert.doesNotMatch(editor.html, /data-order-id="private-draft"|name="captionEn"/);
-  assert.match(editor.html, /data-order-drag/);
+  assert.match(editor.html, /data-order-drag aria-label="Drag photo 1 · 사진 1 끌어서 이동"><span class="bilingual"><span lang="en"><svg class="gallery-drag-icon"[^>]*aria-hidden="true"[^>]*focusable="false"><path [^>]+\/><\/svg> Drag<\/span><span lang="ko"><svg class="gallery-drag-icon"[^>]*aria-hidden="true"[^>]*focusable="false"><path [^>]+\/><\/svg> 끌기<\/span>/);
+  assert.doesNotMatch(editor.html, /↕/);
   assert.match(editor.html, /data-order-position/);
   assert.equal((await fetch(`${base}/admin/gallery/reorder`, { redirect: 'manual' })).status, 302);
   const desired = original.map((photo) => photo.id);

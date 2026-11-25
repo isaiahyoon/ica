@@ -150,6 +150,21 @@ test('dragging updates the order while cancel warnings and failed saves preserve
   assert.equal(afterDiscard.prevented, undefined);
 });
 
+for (const pointerType of ['mouse', 'touch']) {
+  test(`${pointerType} drag starting on the SVG arrow reorders photos`, async () => {
+    const state = await editor();
+    const handle = control(state.cards[0], 'drag');
+    const iconPath = { closest: (selector) => handle.closest(selector) };
+    const pointer = { ...event(iconPath), pointerId: 1, pointerType, button: 0, isPrimary: true, clientX: 0, clientY: 0 };
+    state.document.dropTarget = state.cards[2];
+    state.grid.events.get('pointerdown')(pointer);
+    state.grid.events.get('pointermove')({ ...pointer, clientX: 75, clientY: 10 });
+    state.grid.events.get('pointerup')({ ...pointer, clientX: 75, clientY: 10 });
+    assert.deepEqual(ids(state), ['photo-2', 'photo-3', 'photo-1']);
+    assert.equal(state.save.disabled, false);
+  });
+}
+
 test('tapping a drag handle and canceling a pointer drag leave the order unchanged', async () => {
   const state = await editor();
   const handle = control(state.cards[0], 'drag');
